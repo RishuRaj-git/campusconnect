@@ -1,0 +1,17 @@
+# Secrets — never commit these
+.env
+.env.local
+*.log
+server*.log*
+
+# Dependencies & build output
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+frontend/dist/
+backend/uploads/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

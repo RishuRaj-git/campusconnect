@@ -1,0 +1,15 @@
+# Render single-service deploy (API + frontend in one container).
+# Set MONGO_URI in the Render dashboard after first deploy.
+services:
+  - type: web
+    name: campusconnect
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
