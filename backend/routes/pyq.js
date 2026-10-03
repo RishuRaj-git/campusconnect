@@ -48,7 +48,8 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
   if (req.file) {
     if (!storageEnabled()) return res.status(500).json({ error: 'File storage is not configured.' });
     try {
-      const up = await uploadBuffer(req.file.buffer, { filename: req.file.originalname });
+      const isPdf = path.extname(req.file.originalname).toLowerCase() === '.pdf';
+      const up = await uploadBuffer(req.file.buffer, { filename: req.file.originalname, resourceType: isPdf ? 'raw' : 'auto' });
       fileUrl = up.url; publicId = up.publicId; resourceType = up.resourceType; fileName = req.file.originalname;
     } catch (e) {
       console.error('Cloudinary upload failed:', e.message);

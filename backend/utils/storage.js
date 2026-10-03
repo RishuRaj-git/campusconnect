@@ -16,11 +16,14 @@ function enabled() {
   return Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
 }
 
-// Upload a multer-memory buffer. Returns { url, publicId }.
-function uploadBuffer(buffer, { folder = 'campusconnect/pyqs', filename = 'file' } = {}) {
+// Upload a multer-memory buffer. Returns { url, publicId, resourceType }.
+// PDFs go up as `raw` (plain file delivery, always allowed); images stay on
+// `auto` so they keep previews/thumbnails. (This account denies delivery of
+// image-pipeline PDFs with 401 "deny or ACL failure" — raw bypasses that.)
+function uploadBuffer(buffer, { folder = 'campusconnect/pyqs', filename = 'file', resourceType = 'auto' } = {}) {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: 'auto', public_id: `${Date.now()}-${filename}`.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 120) },
+      { folder, resource_type: resourceType, public_id: `${Date.now()}-${filename}`.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 120) },
       (err, result) => {
         if (err) return reject(err);
         resolve({ url: result.secure_url, publicId: result.public_id, resourceType: result.resource_type });
