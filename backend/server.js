@@ -36,7 +36,16 @@ const io = new Server(server, { cors: { origin: (process.env.CLIENT_URL || 'http
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      // Our pages load photos from Cloudinary — the default img-src 'self'
+      // silently blocks every avatar site-wide (broken-image icons).
+      'img-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com']
+    }
+  }
+}));
 app.use(require('compression')());
 app.use(cors({ origin: (process.env.CLIENT_URL || 'http://localhost:5173').split(',') }));
 app.use(express.json({ limit: '1mb' }));
