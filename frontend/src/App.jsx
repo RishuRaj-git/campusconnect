@@ -1,10 +1,11 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, Link } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import { AuthPage, Home, Discussions } from './pages/Core';
 import { Chat, DMs, PYQ, Profile, Admin } from './pages/Features';
 import { Teachers, TeacherDetail } from './pages/Teachers';
 import { ExamsPage } from './pages/Exams';
+import { PrivacyPolicy, CONTACT_EMAIL, MAKER } from './pages/Legal';
 
 function AnimatedRoutes() {
   const loc = useLocation();
@@ -25,6 +26,7 @@ function AnimatedRoutes() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/:username" element={<Profile />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
         </Routes>
       </div>
     </main>
@@ -42,7 +44,10 @@ export default function App() {
         </div>
         <Navbar />
         <AnimatedRoutes />
-        <footer className="text-center text-xs opacity-60 pb-28 md:pb-8">CampusConnect © 2026 — Where your campus talks.</footer>
+        <footer className="text-center text-xs opacity-80 pb-28 md:pb-8 space-y-1">
+          <p>CampusConnect © 2026 — Where your campus talks.</p>
+          <p>Made with ❤️ by <b>{MAKER}</b> • <a className="text-brand-600 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> • <Link className="text-brand-600 hover:underline" to="/privacy">Privacy Policy</Link></p>
+        </footer>
       </BrowserRouter>
     </AuthProvider>
   );
