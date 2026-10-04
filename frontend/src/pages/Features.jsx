@@ -5,6 +5,28 @@ import { useAuth } from '../context/AuthContext';
 
 export const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+// Instagram-style bubble: no timestamp until you tap it.
+// Consecutive messages from the same person stack tightly.
+function Bubble({ mine, time, name, nameHref, children }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex flex-col max-w-[82%] sm:max-w-[70%] ${mine ? 'items-end' : 'items-start'}`}>
+        {name && (
+          <Link to={nameHref} className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:underline mb-0.5 ml-1">{name}</Link>
+        )}
+        <button
+          onClick={() => setShow(!show)}
+          className={`px-4 py-2 rounded-3xl text-[15px] text-left break-words leading-snug active:scale-[.98] transition-transform ${mine ? 'bg-gradient-to-br from-violet-600 to-purple-600 text-white rounded-br-lg shadow-sm shadow-purple-900/20' : 'bg-slate-200 dark:bg-slate-800 rounded-bl-lg'}`}
+        >
+          {children}
+        </button>
+        {show && time && <span className="text-[10px] opacity-50 mt-0.5 anim-fade-in">{time}</span>}
+      </div>
+    </div>
+  );
+}
+
 function useAutoScroll(dep) {
   const ref = useRef(null);
   useEffect(() => {
@@ -51,16 +73,15 @@ export function Chat() {
       </h2>
       {!user && <p className="text-sm text-amber-600 mb-2 px-1">Login to send messages.</p>}
       {note && <p className="text-sm text-red-600 mb-2 px-1 anim-fade-in">{note}</p>}
-      <div ref={logRef} className="h-[55vh] sm:h-80 overflow-y-auto rounded-xl p-2 sm:p-3 space-y-1.5 bg-slate-50 dark:bg-slate-950">
+      <div ref={logRef} className="h-[55vh] sm:h-80 overflow-y-auto rounded-xl p-2 sm:p-3 bg-slate-50 dark:bg-slate-950">
         {msgs.map((m, i) => {
           const mine = user && m.username === user;
+          const grouped = i > 0 && msgs[i - 1].username === m.username;
           return (
-            <div key={`${m.createdAt || ''}-${i}`} className={`flex ${mine ? 'justify-end' : 'justify-start'} anim-slide-in`}>
-              <div className={`max-w-[82%] sm:max-w-[70%] px-3 py-1.5 rounded-2xl text-sm break-words ${mine ? 'bg-brand-600 text-white rounded-br-md' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-bl-md'}`}>
-                {!mine && <Link to={`/profile/${m.username}`} className="block text-xs font-bold text-brand-600 dark:text-accent-400 hover:underline">{m.username}</Link>}
-                <p>{m.message}</p>
-                <p className={`text-[10px] mt-0.5 text-right ${mine ? 'text-white/70' : 'opacity-50'}`}>{m.createdAt ? fmtTime(m.createdAt) : ''}</p>
-              </div>
+            <div key={`${m.createdAt || ''}-${i}`} className={grouped ? 'mt-1' : 'mt-3 first:mt-0'}>
+              <Bubble mine={mine} time={m.createdAt ? fmtTime(m.createdAt) : ''} name={!mine && !grouped ? m.username : null} nameHref={`/profile/${m.username}`}>
+                {m.message}
+              </Bubble>
             </div>
           );
         })}
@@ -129,15 +150,15 @@ export function DMs() {
       <div className="card !p-3 sm:!p-5 md:col-span-2">
         {!active ? <p className="opacity-60">Pick a conversation. 💬</p> : (<>
           <h3 className="font-bold mb-2">Chat with <Link to={`/profile/${active.otherUser?.username}`} className="text-brand-600 hover:underline">{active.otherUser?.username}</Link></h3>
-          <div ref={logRef} className="h-[50vh] sm:h-72 overflow-y-auto rounded-xl p-2 bg-slate-50 dark:bg-slate-950 space-y-1.5">
+          <div ref={logRef} className="h-[50vh] sm:h-72 overflow-y-auto rounded-xl p-2 bg-slate-50 dark:bg-slate-950">
             {msgs.map((m, i) => {
               const mine = m.sender === user;
+              const grouped = i > 0 && msgs[i - 1].sender === m.sender;
               return (
-                <div key={m._id || i} className={`flex ${mine ? 'justify-end' : 'justify-start'} anim-slide-in`}>
-                  <div className={`max-w-[82%] px-3 py-1.5 rounded-2xl text-sm break-words ${mine ? 'bg-brand-600 text-white rounded-br-md' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-bl-md'}`}>
-                    <p>{m.text}</p>
-                    <p className={`text-[10px] mt-0.5 text-right ${mine ? 'text-white/70' : 'opacity-50'}`}>{m.createdAt ? fmtTime(m.createdAt) : ''}</p>
-                  </div>
+                <div key={m._id || i} className={grouped ? 'mt-1' : 'mt-3 first:mt-0'}>
+                  <Bubble mine={mine} time={m.createdAt ? fmtTime(m.createdAt) : ''}>
+                    {m.text}
+                  </Bubble>
                 </div>
               );
             })}
