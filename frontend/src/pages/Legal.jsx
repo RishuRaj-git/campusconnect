@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 
-export const CONTACT_EMAIL = 'rishurajcusbg@gmail.com';
+export const CONTACT_EMAIL = 'rishurajcusb@gmail.com';
 export const MAKER = 'Rishu Raj';
 
 export function PrivacyPolicy() {
