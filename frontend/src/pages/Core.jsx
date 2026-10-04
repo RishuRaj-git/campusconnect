@@ -48,9 +48,9 @@ export function Home() {
         <p className="text-xs uppercase tracking-widest opacity-80">CampusConnect</p>
         <h1 className="font-display text-3xl font-bold">Where your campus talks.</h1>
         <p className="opacity-90 mt-1">Live chat, discussions, DMs and PYQs — in one clean app.</p>
-        <div className="flex gap-2 mt-4">
-          <Link to="/chat" className="bg-accent-400 text-slate-950 font-semibold rounded-xl px-4 py-2">Open Chat</Link>
-          <Link to="/pyq" className="border border-white/40 rounded-xl px-4 py-2">Browse PYQs</Link>
+        <div className="flex flex-wrap gap-2 mt-4">
+          <Link to="/chat" className="bg-accent-400 text-slate-950 font-semibold rounded-xl px-4 py-2 active:scale-95 transition">Open Chat</Link>
+          <Link to="/pyq" className="border border-white/40 rounded-xl px-4 py-2 active:scale-95 transition">Browse PYQs</Link>
         </div>
       </div>
       <ExamCountdown />
@@ -93,7 +93,7 @@ export function Discussions() {
   };
   return (
     <div className="space-y-3">
-      <div className="flex gap-2"><input className="input" placeholder="Search posts..." value={search} onChange={e => setSearch(e.target.value)} /><button className="btn-ghost" onClick={() => load(true)}>Search</button></div>
+      <div className="flex flex-wrap gap-2"><input className="input !w-auto flex-1 min-w-[180px]" placeholder="Search posts..." value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(true)} /><button className="btn-ghost shrink-0" onClick={() => load(true)}>Search</button></div>
       {user && (
         <form onSubmit={create} className="card space-y-2">
           <input className="input" placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} required />
@@ -105,12 +105,12 @@ export function Discussions() {
         <div key={p._id} className="card lift anim-fade-up" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
           <h3 className="font-bold">{p.title}</h3>
           <p className="text-sm mt-1">{p.content}</p>
-          <p className="text-xs opacity-60 mt-1">by {p.author} • <span key={p.likes?.length || 0} className="anim-pop inline-block">{p.likes?.length || 0} likes</span> • {p.comments?.length || 0} comments</p>
-          <div className="flex gap-2 mt-2">
+          <p className="text-xs opacity-60 mt-1">by <Link to={`/profile/${p.author}`} className="text-brand-600 hover:underline">{p.author}</Link> • <span key={p.likes?.length || 0} className="anim-pop inline-block">{p.likes?.length || 0} likes</span> • {p.comments?.length || 0} comments</p>
+          <div className="flex flex-wrap gap-2 mt-2">
             <button className="btn-ghost text-sm" onClick={() => like(p._id)}>👍 Like</button>
             <button className="btn-ghost text-sm" onClick={() => { const t = prompt('Your comment:'); if (t) comment(p._id, t); }}>💬 Comment</button>
           </div>
-          <div className="mt-2 space-y-1 text-sm">{p.comments?.slice(-3).map((c, i) => <p key={i}><b>{c.author}:</b> {c.text}</p>)}</div>
+          <div className="mt-2 space-y-1 text-sm">{p.comments?.slice(-3).map((c, i) => <p key={i}><Link to={`/profile/${c.author}`} className="font-bold text-brand-600 hover:underline">{c.author}</Link>: {c.text}</p>)}</div>
         </div>
       ))}
       {hasMore && <button className="btn-ghost w-full" onClick={() => load(false)}>Load more</button>}

@@ -1,7 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import api, { SERVER_URL, downloadPyq } from '../api';
 import { useAuth } from '../context/AuthContext';
+
+export const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+function useAutoScroll(dep) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [dep]);
+  return ref;
+}
 
 export function Chat() {
   const { user, socket } = useAuth();
@@ -9,6 +20,7 @@ export function Chat() {
   const [text, setText] = useState('');
   const [note, setNote] = useState('');
   const [live, setLive] = useState(false);
+  const logRef = useAutoScroll(msgs);
   useEffect(() => {
     if (!socket) { setLive(false); return; }
     setLive(socket.connected);
@@ -30,21 +42,33 @@ export function Chat() {
     setText('');
   };
   return (
-    <div className="card">
-      <h2 className="font-bold text-xl mb-2 flex items-center gap-2">💬 Live Chat
+    <div className="card !p-3 sm:!p-5">
+      <h2 className="font-bold text-xl mb-2 flex items-center gap-2 px-1">💬 Live Chat
         <span className="flex items-center gap-1 text-xs font-normal opacity-70">
           <span className={`w-2 h-2 rounded-full ${live ? 'bg-green-500' : 'bg-amber-500 hurry-blink'}`} />
           {live ? 'Live' : 'Connecting…'}
         </span>
       </h2>
-      {!user && <p className="text-sm text-amber-600 mb-2">Login to send messages.</p>}
-      {note && <p className="text-sm text-red-600 mb-2">{note}</p>}
-      <div className="h-80 overflow-y-auto border rounded-xl p-3 space-y-2 bg-slate-50 dark:bg-slate-950">
-        {msgs.map((m, i) => <p key={`${m.createdAt || ''}-${i}`} className="text-sm anim-slide-in"><b>{m.username}:</b> {m.message}</p>)}
+      {!user && <p className="text-sm text-amber-600 mb-2 px-1">Login to send messages.</p>}
+      {note && <p className="text-sm text-red-600 mb-2 px-1 anim-fade-in">{note}</p>}
+      <div ref={logRef} className="h-[55vh] sm:h-80 overflow-y-auto rounded-xl p-2 sm:p-3 space-y-1.5 bg-slate-50 dark:bg-slate-950">
+        {msgs.map((m, i) => {
+          const mine = user && m.username === user;
+          return (
+            <div key={`${m.createdAt || ''}-${i}`} className={`flex ${mine ? 'justify-end' : 'justify-start'} anim-slide-in`}>
+              <div className={`max-w-[82%] sm:max-w-[70%] px-3 py-1.5 rounded-2xl text-sm break-words ${mine ? 'bg-brand-600 text-white rounded-br-md' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-bl-md'}`}>
+                {!mine && <Link to={`/profile/${m.username}`} className="block text-xs font-bold text-brand-600 dark:text-accent-400 hover:underline">{m.username}</Link>}
+                <p>{m.message}</p>
+                <p className={`text-[10px] mt-0.5 text-right ${mine ? 'text-white/70' : 'opacity-50'}`}>{m.createdAt ? fmtTime(m.createdAt) : ''}</p>
+              </div>
+            </div>
+          );
+        })}
+        {msgs.length === 0 && <p className="text-sm opacity-50 text-center pt-8">No messages yet — say hi! 👋</p>}
       </div>
       <form onSubmit={send} className="flex gap-2 mt-3">
-        <input className="input" value={text} onChange={e => setText(e.target.value)} placeholder="Say something..." />
-        <button className="btn-primary">Send</button>
+        <input className="input" value={text} onChange={e => setText(e.target.value)} placeholder="Message…" maxLength={1000} />
+        <button className="btn-primary shrink-0">Send</button>
       </form>
     </div>
   );
@@ -57,7 +81,9 @@ export function DMs() {
   const [msgs, setMsgs] = useState([]);
   const [text, setText] = useState('');
   const [find, setFind] = useState('');
-  const load = async () => { try { const { data } = await api.get('/dms/conversations'); setConvos(data); } catch {} };
+  const [params, setParams] = useSearchParams();
+  const logRef = useAutoScroll(msgs);
+  const load = async () => { try { const { data } = await api.get('/dms/conversations'); setConvos(data); return data; } catch { return []; } };
   useEffect(() => { load(); }, []);
   useEffect(() => {
     if (!socket) return;
@@ -65,11 +91,18 @@ export function DMs() {
     return () => socket.off('dm message');
   }, [socket, active]);
   const open = async (c) => { setActive(c); const { data } = await api.get(`/dms/conversations/${c._id}/messages`); setMsgs(data); };
-  const start = async () => {
-    if (!find.trim()) return;
-    try { const { data } = await api.post('/dms/conversations', { username: find.trim() }); setFind(''); load(); open(data); }
+  const start = async (username) => {
+    const name = (username || find).trim();
+    if (!name) return;
+    try { const { data } = await api.post('/dms/conversations', { username: name }); setFind(''); await load(); open(data); }
     catch (err) { alert(err.response?.data?.error || 'Failed'); }
   };
+  // Deep link from profiles: /dms?to=username auto-opens that chat
+  useEffect(() => {
+    const to = params.get('to');
+    if (to && user) { setParams({}, { replace: true }); start(to); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
   const send = (e) => {
     e.preventDefault();
     if (!text.trim() || !active) return;
@@ -80,17 +113,36 @@ export function DMs() {
   if (!user) return <div className="card">Login to use DMs.</div>;
   return (
     <div className="grid md:grid-cols-3 gap-3">
-      <div className="card">
-        <div className="flex gap-2 mb-3"><input className="input" placeholder="username..." value={find} onChange={e => setFind(e.target.value)} /><button className="btn-primary" onClick={start}>+</button></div>
-        {convos.map(c => <button key={c._id} onClick={() => open(c)} className={`block w-full text-left p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 ${active?._id === c._id ? 'bg-slate-100 dark:bg-slate-800' : ''}`}><b>{c.otherUser?.username}</b><p className="text-xs opacity-60 truncate">{c.lastMessage}</p></button>)}
-      </div>
-      <div className="card md:col-span-2">
-        {!active ? <p className="opacity-60">Pick a conversation.</p> : (<>
-          <h3 className="font-bold mb-2">Chat with {active.otherUser?.username}</h3>
-          <div className="h-72 overflow-y-auto border rounded-xl p-3 space-y-1 bg-slate-50 dark:bg-slate-950">
-            {msgs.map((m, i) => <p key={m._id || i} className="text-sm anim-slide-in"><b>{m.sender}:</b> {m.text}</p>)}
+      <div className="card !p-3 max-h-[32vh] md:max-h-none overflow-y-auto">
+        <div className="flex gap-2 mb-2"><input className="input" placeholder="username..." value={find} onChange={e => setFind(e.target.value)} onKeyDown={e => e.key === 'Enter' && start()} /><button className="btn-primary shrink-0" onClick={() => start()}>+</button></div>
+        {convos.map(c => (
+          <div key={c._id} className={`flex items-center gap-2 p-2 rounded-xl ${active?._id === c._id ? 'bg-slate-100 dark:bg-slate-800' : ''}`}>
+            <button onClick={() => open(c)} className="flex-1 text-left min-w-0">
+              <span className="block font-bold text-sm truncate">{c.otherUser?.username}</span>
+              <span className="block text-xs opacity-60 truncate">{c.lastMessage}</span>
+            </button>
+            <Link to={`/profile/${c.otherUser?.username}`} className="text-xs text-brand-600 shrink-0 px-1">View ›</Link>
           </div>
-          <form onSubmit={send} className="flex gap-2 mt-3"><input className="input" value={text} onChange={e => setText(e.target.value)} placeholder="Message..." /><button className="btn-primary">Send</button></form>
+        ))}
+        {convos.length === 0 && <p className="text-sm opacity-60">No chats yet — search a username above. 🔍</p>}
+      </div>
+      <div className="card !p-3 sm:!p-5 md:col-span-2">
+        {!active ? <p className="opacity-60">Pick a conversation. 💬</p> : (<>
+          <h3 className="font-bold mb-2">Chat with <Link to={`/profile/${active.otherUser?.username}`} className="text-brand-600 hover:underline">{active.otherUser?.username}</Link></h3>
+          <div ref={logRef} className="h-[50vh] sm:h-72 overflow-y-auto rounded-xl p-2 bg-slate-50 dark:bg-slate-950 space-y-1.5">
+            {msgs.map((m, i) => {
+              const mine = m.sender === user;
+              return (
+                <div key={m._id || i} className={`flex ${mine ? 'justify-end' : 'justify-start'} anim-slide-in`}>
+                  <div className={`max-w-[82%] px-3 py-1.5 rounded-2xl text-sm break-words ${mine ? 'bg-brand-600 text-white rounded-br-md' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-bl-md'}`}>
+                    <p>{m.text}</p>
+                    <p className={`text-[10px] mt-0.5 text-right ${mine ? 'text-white/70' : 'opacity-50'}`}>{m.createdAt ? fmtTime(m.createdAt) : ''}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <form onSubmit={send} className="flex gap-2 mt-3"><input className="input" value={text} onChange={e => setText(e.target.value)} placeholder="Message..." maxLength={2000} /><button className="btn-primary shrink-0">Send</button></form>
         </>)}
       </div>
     </div>
@@ -193,10 +245,20 @@ export function PYQ() {
 
 export function Profile() {
   const { user } = useAuth();
+  const { username: paramName } = useParams();
+  const nav = useNavigate();
   const [p, setP] = useState(null);
+  const [missing, setMissing] = useState(false);
   const [form, setForm] = useState({ branch: '', semester: '', year: '', enrollmentNo: '', bio: '' });
-  useEffect(() => { if (user) api.get(`/profile/${user}`).then(r => { setP(r.data); setForm(r.data); }).catch(() => {}); }, [user]);
-  if (!user) return <div className="card">Login to view profile. <a href="/auth" className="text-brand-600">Login →</a></div>;
+  const viewing = paramName || user;
+  const own = user && viewing === user;
+  useEffect(() => {
+    if (!viewing) return;
+    setMissing(false);
+    api.get(`/profile/${viewing}`).then(r => { setP(r.data); setForm(r.data); }).catch(() => setMissing(true));
+  }, [viewing]);
+  if (!viewing) return <div className="card">Login to view profiles. <Link to="/auth" className="text-brand-600">Login →</Link></div>;
+  if (missing) return <div className="card anim-fade-in">User “{viewing}” not found. 🕵️</div>;
   const save = async (e) => { e.preventDefault(); const { data } = await api.put('/profile', form); setP({ ...p, ...data }); alert('Saved!'); };
   const [uploading, setUploading] = useState(false);
   const uploadAvatar = async (e) => {
@@ -217,11 +279,19 @@ export function Profile() {
         {p?.avatarUrl
           ? <img src={p.avatarUrl} alt="avatar" className="w-16 h-16 rounded-full object-cover border-2 border-brand-500/40 anim-pop" />
           : <span className="w-16 h-16 rounded-full grid place-items-center text-2xl bg-slate-200 dark:bg-slate-800">👤</span>}
-        <div>
-          <h2 className="font-bold text-xl">{user}</h2>
+        <div className="flex-1">
+          <h2 className="font-bold text-xl">{viewing}</h2>
           {p && <p className="text-sm opacity-60">📝 {p.stats.discussionCount} posts • 📚 {p.stats.pyqCount} PYQs</p>}
         </div>
+        {!own && user && (
+          <button className="btn-primary text-sm shrink-0" onClick={() => nav(`/dms?to=${viewing}`)}>✉️ Message</button>
+        )}
       </div>
+      {p?.bio && <p className="text-sm bg-slate-50 dark:bg-slate-950 rounded-xl px-3 py-2">{p.bio}</p>}
+      {(p?.branch || p?.semester || p?.year) && (
+        <p className="text-xs opacity-60">{[p.branch, p.semester ? `Sem ${p.semester}` : '', p.year].filter(Boolean).join(' • ')}</p>
+      )}
+      {own && (<>
       <label className="btn-ghost text-sm text-center cursor-pointer">
         {uploading ? 'Uploading…' : '📷 Change photo'}
         <input type="file" accept=".jpg,.jpeg,.png,.webp" className="hidden" onChange={uploadAvatar} disabled={uploading} />
@@ -234,6 +304,7 @@ export function Profile() {
         <textarea className="input" placeholder="Bio (200 chars)" value={form.bio || ''} onChange={e => setForm({ ...form, bio: e.target.value })} />
         <button className="btn-primary">Save</button>
       </form>
+      </>)}
     </div>
   );
 }

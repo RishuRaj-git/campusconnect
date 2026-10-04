@@ -6,6 +6,7 @@ const { authMiddleware } = require('../middleware/auth');
 const adminOnly = require('../middleware/admin');
 const { containsAbuse } = require('../utils/profanity');
 const { escapeRegExp, toStr } = require('../utils/sanitize');
+const { actionRate } = require('../middleware/actionLimits');
 
 const router = express.Router();
 
@@ -67,9 +68,12 @@ router.get('/reviews/flagged', authMiddleware, adminOnly, async (req, res) => {
 });
 
 // POST /api/teachers — any logged-in user can add a teacher
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, actionRate('light'), async (req, res) => {
   const { name, department, subjects, bio } = req.body;
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'Teacher name is required.' });
+  if (typeof bio === 'string' && bio && containsAbuse(bio)) {
+    return res.status(400).json({ error: 'Please keep it respectful — bio blocked.' });
+  }
   const existing = await Teacher.findOne({ name: new RegExp(`^${escapeRegExp(toStr(name, 100))}$`, 'i') });
   if (existing) return res.json(existing); // idempotent — no duplicates
   const t = await new Teacher({

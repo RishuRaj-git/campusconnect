@@ -5,7 +5,8 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .card { @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-sm border border-slate-200/70 dark:border-slate-800 p-5; }
 .btn-primary { @apply bg-brand-600 hover:bg-brand-500 active:scale-95 text-white font-semibold rounded-xl px-4 py-2 transition-all duration-150; }
 .btn-ghost { @apply border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all duration-150; }
-.input { @apply w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 outline-none focus:ring-2 focus:ring-brand-500 transition; }
+.input { @apply w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-base sm:text-sm outline-none focus:ring-2 focus:ring-brand-500 transition; }
+/* 16px inputs stop iOS auto-zoom on focus */
 
 /* ---------- CampusConnect motion system (CSS-only, no deps) ---------- */
 @keyframes cc-fade-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
@@ -88,10 +89,11 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .nav-link { @apply flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-900/5 dark:hover:bg-white/10 active:scale-95 transition-all duration-150; }
 .nav-link.active { @apply bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow; }
 
-/* iOS-style bottom tab bar */
+/* iOS-style bottom tab bar — horizontally scrollable so 8+ tabs stay tappable */
 .tabbar { @apply frost border-t fixed bottom-0 inset-x-0 z-20; padding-bottom: env(safe-area-inset-bottom); }
-.tabbar-inner { @apply max-w-5xl mx-auto grid grid-cols-8 px-2 pt-1.5 pb-2; }
-.tab-item { @apply flex flex-col items-center gap-0.5 py-1 text-[10px] font-medium text-slate-500 dark:text-slate-400 active:scale-90 transition-all duration-150; }
+.tabbar-inner { @apply max-w-5xl mx-auto flex gap-0.5 px-2 pt-1.5 pb-2 overflow-x-auto; scrollbar-width: none; }
+.tabbar-inner::-webkit-scrollbar { display: none; }
+.tab-item { @apply flex flex-col items-center gap-0.5 py-1 px-3 min-w-[3.5rem] shrink-0 text-[10px] font-medium text-slate-500 dark:text-slate-400 active:scale-90 transition-all duration-150; }
 .tab-item.active { @apply text-brand-600 dark:text-accent-400; }
 .tab-item svg { @apply w-6 h-6; }
 .tab-dot { @apply w-1 h-1 rounded-full bg-brand-600 dark:bg-accent-400 mt-0.5; }

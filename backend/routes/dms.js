@@ -2,6 +2,7 @@ const express = require('express');
 const User = require('../models/User');
 const { Conversation, DirectMessage } = require('../models/Chat');
 const { authMiddleware } = require('../middleware/auth');
+const { actionRate } = require('../middleware/actionLimits');
 
 const router = express.Router();
 router.get('/conversations', authMiddleware, async (req, res) => {
@@ -11,7 +12,7 @@ router.get('/conversations', authMiddleware, async (req, res) => {
     return { _id: c._id, otherUser: other ? { username: other.username, avatarUrl: other.avatarUrl } : null, lastMessage: c.lastMessage, lastMessageAt: c.lastMessageAt };
   }));
 });
-router.post('/conversations', authMiddleware, async (req, res) => {
+router.post('/conversations', authMiddleware, actionRate('light'), async (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Username required.' });
   if (username === req.user.username) return res.status(400).json({ error: "Can't message yourself." });

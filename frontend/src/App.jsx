@@ -23,6 +23,7 @@ function AnimatedRoutes() {
           <Route path="/teachers/:id" element={<TeacherDetail />} />
           <Route path="/exams" element={<ExamsPage />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/:username" element={<Profile />} />
           <Route path="/admin" element={<Admin />} />
         </Routes>
       </div>

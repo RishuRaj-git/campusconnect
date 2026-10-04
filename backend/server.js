@@ -82,6 +82,8 @@ const { ChatMessage, Conversation, DirectMessage, Notification } = require('./mo
 // - max 5 chat/DM sends per 10s per user (spam floods)
 const connBucket = createBucket({ max: 30, windowMs: 60 * 1000 });
 const msgBucket = createBucket({ max: 5, windowMs: 10 * 1000 });
+// Copy-paste guard: identical message from the same user within 30s is spam
+const lastChat = new Map(); // username -> { text, at }
 
 app.get('/api/health', (req, res) => res.json({
   ok: true,
@@ -160,13 +162,22 @@ io.on('connection', async (socket) => {
     if (!name) { socket.emit('chat message blocked', { reason: 'Login to chat.' }); return; }
     if (!data.message) return;
     if (!msgBucket.take(`chat:${name}`)) { socket.emit('chat message blocked', { reason: 'Slow down — you are sending messages too fast.' }); return; }
+    const now = Date.now();
+    const prev = lastChat.get(name);
+    const cleanMsg = String(data.message).slice(0, 1000);
+    if (prev && prev.text === cleanMsg && now - prev.at < 30000) {
+      socket.emit('chat message blocked', { reason: 'You already sent that — no need to repeat it.' });
+      return;
+    }
+    lastChat.set(name, { text: cleanMsg, at: now });
+    if (lastChat.size > 2000) lastChat.clear();
     if ((await User.findOne({ username: name }).select('isBanned'))?.isBanned) {
       socket.emit('chat message blocked', { reason: 'Your account has been suspended.' });
       socket.disconnect(true);
       return;
     }
-    if (containsAbuse(data.message)) { socket.emit('chat message blocked', { reason: 'Please keep it respectful.' }); return; }
-    const payload = { username: name, message: String(data.message).slice(0, 1000), createdAt: new Date() };
+    if (containsAbuse(cleanMsg)) { socket.emit('chat message blocked', { reason: 'Please keep it respectful.' }); return; }
+    const payload = { username: name, message: cleanMsg, createdAt: new Date() };
     io.emit('chat message', payload);
     try { await ChatMessage.create(payload); } catch (e) { console.error(e); }
   });
@@ -180,13 +191,14 @@ io.on('connection', async (socket) => {
       socket.disconnect(true);
       return;
     }
-    if (containsAbuse(text)) { socket.emit('chat message blocked', { reason: 'Please keep it respectful.' }); return; }
+    const cleanDm = String(text).slice(0, 2000);
+    if (containsAbuse(cleanDm)) { socket.emit('chat message blocked', { reason: 'Please keep it respectful.' }); return; }
     try {
       const convo = await Conversation.findById(conversationId);
       if (!convo) return;
-      const dm = await DirectMessage.create({ conversationId, sender: from, text: String(text).slice(0, 2000) });
-      await Conversation.findByIdAndUpdate(conversationId, { lastMessage: text, lastMessageAt: new Date() });
-      const payload = { conversationId, _id: dm._id, sender: from, text, createdAt: dm.createdAt };
+      const dm = await DirectMessage.create({ conversationId, sender: from, text: cleanDm });
+      await Conversation.findByIdAndUpdate(conversationId, { lastMessage: cleanDm, lastMessageAt: new Date() });
+      const payload = { conversationId, _id: dm._id, sender: from, text: cleanDm, createdAt: dm.createdAt };
       io.to(`user:${toUsername}`).to(`user:${from}`).emit('dm message', payload);
       if (toUsername !== from) {
         const n = await Notification.create({ recipient: toUsername, type: 'dm', fromUser: from, refId: conversationId.toString(), text: `${from} sent you a message` });

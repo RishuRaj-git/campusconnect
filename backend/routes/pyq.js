@@ -5,6 +5,8 @@ const fs = require('fs');
 const PYQ = require('../models/PYQ');
 const { authMiddleware } = require('../middleware/auth');
 const { escapeRegExp, toStr } = require('../utils/sanitize');
+const { actionRate } = require('../middleware/actionLimits');
+const { containsAbuse } = require('../utils/profanity');
 
 const router = express.Router();
 // Memory storage — files stream straight to Cloudinary, never touch disk
@@ -34,10 +36,13 @@ router.get('/meta', async (req, res) => {
   const [branches, subjects, years] = await Promise.all([PYQ.distinct('branch'), PYQ.distinct('subject'), PYQ.distinct('year')]);
   res.json({ branches: branches.sort(), subjects: subjects.sort(), years: years.sort((a, b) => b - a) });
 });
-router.post('/upload', authMiddleware, upload.single('file'), async (req, res) => {
+router.post('/upload', authMiddleware, actionRate('upload'), upload.single('file'), async (req, res) => {
   const { branch, subject, year, semester, examType, title, notes, teacherName } = req.body;
   if (!branch || !subject || !year || !title) return res.status(400).json({ error: 'Branch, subject, year, title required.' });
   if (!req.file && !notes) return res.status(400).json({ error: 'Upload a file or add notes.' });
+  if (containsAbuse(title) || containsAbuse(notes || '')) {
+    return res.status(400).json({ error: 'Please keep it respectful — title/notes blocked.' });
+  }
   let teacher;
   if (teacherName && String(teacherName).trim()) {
     const { Teacher } = require('../models/Teacher');

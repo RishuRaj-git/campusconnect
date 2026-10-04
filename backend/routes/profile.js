@@ -6,6 +6,8 @@ const User = require('../models/User');
 const Discussion = require('../models/Discussion');
 const PYQ = require('../models/PYQ');
 const { authMiddleware } = require('../middleware/auth');
+const { actionRate } = require('../middleware/actionLimits');
+const { containsAbuse } = require('../utils/profanity');
 
 const router = express.Router();
 // Memory storage — avatars stream straight to Cloudinary, never touch disk.
@@ -21,8 +23,11 @@ router.get('/:username', async (req, res) => {
     Discussion.countDocuments({ author: user.username }), PYQ.countDocuments({ uploadedBy: user._id })]);
   res.json({ username: user.username, branch: user.branch, semester: user.semester, year: user.year, enrollmentNo: user.enrollmentNo, bio: user.bio, avatarUrl: user.avatarUrl, stats: { discussionCount, pyqCount } });
 });
-router.put('/', authMiddleware, async (req, res) => {
+router.put('/', authMiddleware, actionRate('light'), async (req, res) => {
   const { branch, semester, year, enrollmentNo, bio } = req.body;
+  if (typeof bio === 'string' && bio && containsAbuse(bio)) {
+    return res.status(400).json({ error: 'Please keep it respectful — bio blocked.' });
+  }
   const update = {};
   if (branch !== undefined) update.branch = String(branch).slice(0, 50);
   if (semester !== undefined) update.semester = semester;
@@ -31,7 +36,7 @@ router.put('/', authMiddleware, async (req, res) => {
   if (bio !== undefined) update.bio = String(bio).slice(0, 200);
   res.json(await User.findByIdAndUpdate(req.user.id, update, { new: true }).select('-password -avatarPublicId'));
 });
-router.post('/avatar', authMiddleware, upload.single('avatar'), async (req, res) => {
+router.post('/avatar', authMiddleware, actionRate('upload'), upload.single('avatar'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No image.' });
   if (!storageEnabled()) return res.status(500).json({ error: 'File storage is not configured.' });
   let up;

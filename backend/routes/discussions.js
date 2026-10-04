@@ -4,6 +4,7 @@ const { Notification } = require('../models/Chat');
 const { authMiddleware } = require('../middleware/auth');
 const { containsAbuse } = require('../utils/profanity');
 const { escapeRegExp, toStr } = require('../utils/sanitize');
+const { actionRate, duplicateText } = require('../middleware/actionLimits');
 
 const router = express.Router();
 async function notify(io, data) {
@@ -28,15 +29,18 @@ module.exports = (io) => {
     res.set('X-Total-Count', String(total));
     res.json(items);
   });
-  router.post('/', authMiddleware, async (req, res) => {
+  router.post('/', authMiddleware, actionRate('write'), async (req, res) => {
     const title = toStr(req.body.title, 150);
     const content = toStr(req.body.content, 5000);
     if (!title || !content) return res.status(400).json({ error: 'Title and content required.' });
     if (containsAbuse(title) || containsAbuse(content)) return res.status(400).json({ error: 'Please keep it respectful — post blocked.' });
+    if (duplicateText(`post:${req.user.id}`, `${title}\n${content}`, 5 * 60 * 1000)) {
+      return res.status(429).json({ error: 'You already posted that — no need to send it twice.' });
+    }
     const d = await new Discussion({ title, content, author: req.user.username, authorId: req.user.id }).save();
     res.status(201).json(d);
   });
-  router.post('/:id/like', authMiddleware, async (req, res) => {
+  router.post('/:id/like', authMiddleware, actionRate('like'), async (req, res) => {
     const d = await Discussion.findById(req.params.id);
     if (!d) return res.status(404).json({ error: 'Not found.' });
     const i = d.likes.indexOf(req.user.username);
@@ -46,13 +50,16 @@ module.exports = (io) => {
     if (liked) notify(io, { recipient: d.author, type: 'like', fromUser: req.user.username, refId: d._id.toString(), text: `${req.user.username} liked your post "${d.title}"` });
     res.json(d);
   });
-  router.post('/:id/comments', authMiddleware, async (req, res) => {
-    const { text } = req.body;
+  router.post('/:id/comments', authMiddleware, actionRate('write'), async (req, res) => {
+    const text = toStr(req.body.text, 1000);
     if (!text) return res.status(400).json({ error: 'Comment required.' });
     if (containsAbuse(text)) return res.status(400).json({ error: 'Please keep it respectful — comment blocked.' });
+    if (duplicateText(`comment:${req.user.id}`, text)) {
+      return res.status(429).json({ error: 'You already sent that comment.' });
+    }
     const d = await Discussion.findById(req.params.id);
     if (!d) return res.status(404).json({ error: 'Not found.' });
-    d.comments.push({ author: req.user.username, authorId: req.user.id, text: text.slice(0, 1000) });
+    d.comments.push({ author: req.user.username, authorId: req.user.id, text });
     await d.save();
     notify(io, { recipient: d.author, type: 'comment', fromUser: req.user.username, refId: d._id.toString(), text: `${req.user.username} commented on "${d.title}"` });
     res.json(d);
