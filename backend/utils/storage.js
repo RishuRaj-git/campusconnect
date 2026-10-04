@@ -16,21 +16,21 @@ function enabled() {
   return Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
 }
 
-// Upload a multer-memory buffer. Returns { url, publicId, resourceType }.
-// PDFs go up as `raw` (plain file delivery, always allowed); images stay on
-// `auto` so they keep previews/thumbnails. (This account denies delivery of
-// image-pipeline PDFs with 401 "deny or ACL failure" — raw bypasses that.)
-// The original extension is preserved in the public_id so downloads save as
-// real `name.pdf` files instead of extensionless slugs.
+// Upload a multer-memory buffer. Returns { url, publicId, resourceType, ext }.
+// PDFs go up as `raw`; images stay on `auto` for previews.
+// QUIRK (verified live on this account): delivery URLs ending in `.pdf` get
+// 401 "deny or ACL failure", while the identical bytes without the extension
+// deliver 200. So public_ids stay extensionless and the real filename travels
+// separately (DB `fileName`) — the frontend restores it on download.
 function uploadBuffer(buffer, { folder = 'campusconnect/pyqs', filename = 'file', resourceType = 'auto' } = {}) {
   const ext = (filename.match(/\.[a-zA-Z0-9]{2,5}$/) || [''])[0].toLowerCase();
   const base = filename.replace(/\.[a-zA-Z0-9]{2,5}$/, '').replace(/[^a-zA-Z0-9-_]/g, '_').slice(-80) || 'file';
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: resourceType, public_id: `${Date.now()}-${base}${ext}`.slice(0, 150) },
+      { folder, resource_type: resourceType, public_id: `${Date.now()}-${base}`.slice(0, 150) },
       (err, result) => {
         if (err) return reject(err);
-        resolve({ url: result.secure_url, publicId: result.public_id, resourceType: result.resource_type });
+        resolve({ url: result.secure_url, publicId: result.public_id, resourceType: result.resource_type, ext });
       }
     );
     stream.end(buffer);

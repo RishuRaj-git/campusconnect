@@ -29,12 +29,27 @@ api.interceptors.response.use(
 );
 
 // Login-gated download: plain <a href> can't carry a JWT, so verify via the
-// API (counts the download) then open the returned file URL. Works for both
-// Cloudinary URLs (absolute) and legacy local files (relative).
+// API (counts the download) then save the file.
+// Why blob and not window.open(url)? Our Cloudinary account denies delivery
+// of `.pdf`-suffixed URLs (401), so files are stored extensionless and the
+// real name (e.g. "paper.pdf") is restored here via the download attribute.
 export async function downloadPyq(id) {
   const { data } = await api.get(`/pyq/${id}/download`);
   const url = data.url.startsWith('http') ? data.url : `${SERVER_URL}${data.url}`;
-  window.open(url, '_blank', 'noopener');
+  const name = data.fileName || 'download';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('fetch failed');
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  } catch {
+    window.open(url, '_blank', 'noopener'); // last-resort fallback
+  }
 }
 
 export default api;
