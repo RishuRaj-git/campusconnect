@@ -149,11 +149,10 @@ io.on('connection', async (socket) => {
   // someone else's DMs and notifications.)
   const username = socket.data.user?.username;
   if (username) { socket.join(`user:${username}`); socket.data.username = username; }
-  try {
-    const history = await ChatMessage.find().sort({ createdAt: -1 }).limit(50).lean();
-    socket.emit('chat history', history.reverse());
-  } catch (e) { console.error(e); }
 
+  // NOTE: handlers are registered BEFORE the history fetch below. History
+  // needs a DB round-trip (slow on cold Atlas); anything sent in that window
+  // would otherwise vanish silently.
   socket.on('chat message', async (data) => {
     // Sender identity comes ONLY from the verified JWT — never from the
     // client payload (otherwise anyone could impersonate anyone).
@@ -195,6 +194,11 @@ io.on('connection', async (socket) => {
       }
     } catch (e) { console.error('DM error', e); }
   });
+
+  // History loads last on purpose (see note above) — fire and forget.
+  ChatMessage.find().sort({ createdAt: -1 }).limit(50).lean()
+    .then((history) => socket.emit('chat history', history.reverse()))
+    .catch((e) => console.error(e));
 });
 
 // Crash diagnostics — log and exit non-zero (container/supervisor restarts us)

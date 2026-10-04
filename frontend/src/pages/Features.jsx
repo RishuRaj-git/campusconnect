@@ -8,23 +8,35 @@ export function Chat() {
   const [msgs, setMsgs] = useState([]);
   const [text, setText] = useState('');
   const [note, setNote] = useState('');
+  const [live, setLive] = useState(false);
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) { setLive(false); return; }
+    setLive(socket.connected);
+    const onConnect = () => { setLive(true); setNote(''); };
+    const onDisconnect = () => setLive(false);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
     socket.on('chat history', setMsgs);
     socket.on('chat message', (m) => setMsgs((p) => [...p.slice(-99), m]));
     socket.on('chat message blocked', (d) => setNote(d.reason));
-    return () => { socket.off('chat history'); socket.off('chat message'); socket.off('chat message blocked'); };
+    return () => { socket.off('connect', onConnect); socket.off('disconnect', onDisconnect); socket.off('chat history'); socket.off('chat message'); socket.off('chat message blocked'); };
   }, [socket]);
   const send = (e) => {
     e.preventDefault();
     if (!text.trim()) return;
     if (!user) { setNote('Login to chat'); return; }
-    socket.emit('chat message', { username: user, message: text });
+    if (!socket || !socket.connected) { setNote('Connecting… wait a second and retry'); return; }
+    socket.emit('chat message', { message: text });
     setText('');
   };
   return (
     <div className="card">
-      <h2 className="font-bold text-xl mb-2">💬 Live Chat</h2>
+      <h2 className="font-bold text-xl mb-2 flex items-center gap-2">💬 Live Chat
+        <span className="flex items-center gap-1 text-xs font-normal opacity-70">
+          <span className={`w-2 h-2 rounded-full ${live ? 'bg-green-500' : 'bg-amber-500 hurry-blink'}`} />
+          {live ? 'Live' : 'Connecting…'}
+        </span>
+      </h2>
       {!user && <p className="text-sm text-amber-600 mb-2">Login to send messages.</p>}
       {note && <p className="text-sm text-red-600 mb-2">{note}</p>}
       <div className="h-80 overflow-y-auto border rounded-xl p-3 space-y-2 bg-slate-50 dark:bg-slate-950">
@@ -61,6 +73,7 @@ export function DMs() {
   const send = (e) => {
     e.preventDefault();
     if (!text.trim() || !active) return;
+    if (!socket || !socket.connected) { alert('Connecting… wait a second and retry'); return; }
     socket.emit('dm message', { conversationId: active._id, toUsername: active.otherUser.username, text });
     setText('');
   };
