@@ -261,6 +261,8 @@ export function Profile() {
   if (missing) return <div className="card anim-fade-in">User “{viewing}” not found. 🕵️</div>;
   const save = async (e) => { e.preventDefault(); const { data } = await api.put('/profile', form); setP({ ...p, ...data }); alert('Saved!'); };
   const [uploading, setUploading] = useState(false);
+  const [imgDead, setImgDead] = useState(false);
+  useEffect(() => { setImgDead(false); }, [viewing, p?.avatarUrl]);
   const uploadAvatar = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -276,8 +278,8 @@ export function Profile() {
   return (
     <div className="card space-y-2 max-w-lg">
       <div className="flex items-center gap-3">
-        {p?.avatarUrl
-          ? <img src={p.avatarUrl} alt="avatar" className="w-16 h-16 rounded-full object-cover border-2 border-brand-500/40 anim-pop" />
+        {!imgDead && p?.avatarUrl
+          ? <img src={p.avatarUrl} alt="avatar" onError={() => setImgDead(true)} className="w-16 h-16 rounded-full object-cover border-2 border-brand-500/40 anim-pop" />
           : <span className="w-16 h-16 rounded-full grid place-items-center text-2xl bg-slate-200 dark:bg-slate-800">👤</span>}
         <div className="flex-1">
           <h2 className="font-bold text-xl">{viewing}</h2>
