@@ -3,6 +3,8 @@
 .env.local
 *.log
 server*.log*
+.test-*
+.spam-*
 
 # Dependencies & build output
 node_modules/
