@@ -42,7 +42,14 @@ app.use(helmet({
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
       // Our pages load photos from Cloudinary — the default img-src 'self'
       // silently blocks every avatar site-wide (broken-image icons).
-      'img-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com']
+      'img-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com'],
+      // The download button fetches file bytes from Cloudinary (restores the
+      // real filename via blob). Without this, fetch() is refused and
+      // downloads fall back to extensionless direct links.
+      'connect-src': ["'self'", 'https://res.cloudinary.com'],
+      // Allows ONLY our tiny theme-boot script in index.html (exact hash —
+      // nothing else inline can run).
+      'script-src': ["'self'", "'sha256-+b0hIA56MLrkgHq+7JqSlZlF1cYTQTVEETZn7zAhS4s='"]
     }
   }
 }));
