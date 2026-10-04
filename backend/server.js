@@ -118,7 +118,15 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 // used automatically when no VITE_SERVER_URL is set.
 const webDist = path.join(__dirname, '..', 'frontend', 'dist');
 if (fs.existsSync(path.join(webDist, 'index.html'))) {
-  app.use(express.static(webDist, { maxAge: '1h' }));
+  // index.html must NEVER cache (it points at hashed JS/CSS bundles — a stale
+  // copy keeps users on last week's frontend after every deploy). Assets keep
+  // their 1h cache since their filenames change per build.
+  app.use(express.static(webDist, {
+    maxAge: '1h',
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+    }
+  }));
   app.get(/^\/(?!api|uploads|socket\.io).*/, (req, res) =>
     res.sendFile(path.join(webDist, 'index.html')));
 }
