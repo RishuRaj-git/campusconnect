@@ -55,9 +55,35 @@ export function Home() {
       </div>
       <ExamCountdown />
       <div className="grid sm:grid-cols-2 gap-3">
-        {[['/chat', '💬 Live Chat', 'Group room, online now'], ['/discussions', '🗣️ Discussions', 'Posts, likes, comments'], ['/pyq', '📚 PYQ Bank', 'Papers by branch/year'], ['/teachers', '👩‍🏫 Teachers', 'Ratings + teacher notes'], ['/exams', '⏳ Exams', 'Countdowns + hurry mode'], ['/dms', '✉️ DMs', '1-on-1 messages']].map(([to, t, d], i) => (
+        {[['/chat', '💬 Live Chat', 'Group room, online now'], ['/discussions', '❓ Campus Queries', 'Ask, answer, upvote'], ['/pyq', '📚 PYQ Bank', 'Papers by branch/year'], ['/teachers', '👩‍🏫 Teachers', 'Ratings + teacher notes'], ['/exams', '⏳ Exams', 'Countdowns + hurry mode'], ['/dms', '✉️ DMs', '1-on-1 messages']].map(([to, t, d], i) => (
           <Link key={to} to={to} className="card lift anim-fade-up" style={{ animationDelay: `${Math.min(i, 6) * 60}ms` }}><h3 className="font-bold">{t}</h3><p className="text-sm opacity-70">{d}</p></Link>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function Answer({ qid, a, user, onLike }) {
+  const [open, setOpen] = useState(false);
+  const likes = a.likes?.length || 0;
+  const liked = user && a.likes?.includes(user);
+  return (
+    <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+      <div className="flex items-center gap-2 text-xs mb-1">
+        <Link to={`/profile/${a.author}`} className="font-bold text-brand-600 hover:underline">{a.author}</Link>
+        {a.createdAt && <span className="opacity-50">{new Date(a.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>}
+      </div>
+      <p className="text-sm whitespace-pre-wrap">{a.text.length > 300 && !open ? a.text.slice(0, 300) + '…' : a.text}</p>
+      {a.text.length > 300 && (
+        <button className="text-xs text-brand-600 font-semibold mt-0.5" onClick={() => setOpen(!open)}>{open ? 'Show less' : 'Read more'}</button>
+      )}
+      <div className="mt-1.5">
+        <button
+          onClick={() => onLike(qid, a._id)}
+          className={`inline-flex items-center gap-1 text-xs font-semibold rounded-full px-3 py-1 border active:scale-90 transition-all ${liked ? 'bg-brand-600 text-white border-brand-600' : 'border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-800'}`}
+        >
+          ▲ <span key={likes} className="anim-pop inline-block">{likes}</span>
+        </button>
       </div>
     </div>
   );
@@ -69,11 +95,14 @@ export function Discussions() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('latest');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [expanded, setExpanded] = useState({});
+  const [drafts, setDrafts] = useState({});
   const load = async (reset = true) => {
     const p = reset ? 1 : page + 1;
-    const { data, headers } = await api.get('/discussions', { params: { search, page: p, limit: 20 } });
+    const { data, headers } = await api.get('/discussions', { params: { search, sort, page: p, limit: 20 } });
     const total = parseInt(headers['x-total-count'] || '0', 10);
     setPosts(reset ? data : [...posts, ...data]);
     setPage(p);
@@ -83,36 +112,85 @@ export function Discussions() {
   const create = async (e) => {
     e.preventDefault();
     try { await api.post('/discussions', { title, content }); setTitle(''); setContent(''); load(true); }
-    catch (err) { alert(err.response?.data?.error || 'Login required to post'); }
+    catch (err) { alert(err.response?.data?.error || 'Login required to ask'); }
   };
-  const like = async (id) => { try { const { data } = await api.post(`/discussions/${id}/like`); setPosts(posts.map(p => p._id === id ? data : p)); } catch { alert('Login required'); } };
-  const comment = async (id, text) => {
+  const likeQ = async (id) => { try { const { data } = await api.post(`/discussions/${id}/like`); setPosts(posts.map(p => p._id === id ? data : p)); } catch { alert('Login required'); } };
+  const likeA = async (qid, cid) => {
+    try { const { data } = await api.post(`/discussions/${qid}/comments/${cid}/like`); setPosts(posts.map(p => p._id === qid ? data : p)); }
+    catch (err) { alert(err.response?.data?.error || 'Login required'); }
+  };
+  const answer = async (id) => {
+    const text = (drafts[id] || '').trim();
     if (!text) return;
-    try { const { data } = await api.post(`/discussions/${id}/comments`, { text }); setPosts(posts.map(p => p._id === id ? data : p)); }
-    catch (err) { alert(err.response?.data?.error || 'Failed'); }
+    try {
+      const { data } = await api.post(`/discussions/${id}/comments`, { text });
+      setPosts(posts.map(p => p._id === id ? data : p));
+      setDrafts({ ...drafts, [id]: '' });
+      setExpanded({ ...expanded, [id]: true });
+    } catch (err) { alert(err.response?.data?.error || 'Failed'); }
   };
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2"><input className="input !w-auto flex-1 min-w-[180px]" placeholder="Search posts..." value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(true)} /><button className="btn-ghost shrink-0" onClick={() => load(true)}>Search</button></div>
+      <h2 className="font-display font-bold text-2xl">❓ Campus Queries</h2>
+      <div className="flex flex-wrap gap-2">
+        <input className="input !w-auto flex-1 min-w-[160px]" placeholder="Search questions..." value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(true)} />
+        <select className="input !w-auto" value={sort} onChange={e => { setSort(e.target.value); }}>
+          <option value="latest">Latest</option>
+          <option value="liked">Most liked</option>
+        </select>
+        <button className="btn-ghost shrink-0" onClick={() => load(true)}>Go</button>
+      </div>
       {user && (
         <form onSubmit={create} className="card space-y-2">
-          <input className="input" placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} required />
-          <textarea className="input" rows="3" placeholder="What's on your mind?" value={content} onChange={e => setContent(e.target.value)} required />
-          <button className="btn-primary">Post</button>
+          <h3 className="font-bold">Ask the campus 💬</h3>
+          <input className="input" placeholder="Your question in one line? *" value={title} onChange={e => setTitle(e.target.value)} required />
+          <textarea className="input" rows="2" placeholder="Details, branch/subject context… (optional, helps better answers)" value={content} onChange={e => setContent(e.target.value)} />
+          <button className="btn-primary">Ask question</button>
         </form>
       )}
-      {posts.map((p, i) => (
-        <div key={p._id} className="card lift anim-fade-up" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
-          <h3 className="font-bold">{p.title}</h3>
-          <p className="text-sm mt-1">{p.content}</p>
-          <p className="text-xs opacity-60 mt-1">by <Link to={`/profile/${p.author}`} className="text-brand-600 hover:underline">{p.author}</Link> • <span key={p.likes?.length || 0} className="anim-pop inline-block">{p.likes?.length || 0} likes</span> • {p.comments?.length || 0} comments</p>
-          <div className="flex flex-wrap gap-2 mt-2">
-            <button className="btn-ghost text-sm" onClick={() => like(p._id)}>👍 Like</button>
-            <button className="btn-ghost text-sm" onClick={() => { const t = prompt('Your comment:'); if (t) comment(p._id, t); }}>💬 Comment</button>
+      {posts.map((p, i) => {
+        const answers = [...(p.comments || [])].sort((a, b) => (b.likes || []).length - (a.likes || []).length);
+        const isOpen = expanded[p._id];
+        const shown = isOpen ? answers : answers.slice(0, 2);
+        const n = p.comments?.length || 0;
+        return (
+          <div key={p._id} className="card lift anim-fade-up" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
+            <h3 className="font-display font-bold text-lg leading-snug">{p.title}</h3>
+            {p.content && <p className="text-sm mt-1 opacity-80">{p.content}</p>}
+            <p className="text-xs opacity-60 mt-1.5">
+              Asked by <Link to={`/profile/${p.author}`} className="text-brand-600 hover:underline font-semibold">{p.author}</Link>
+              {' '}• <span key={p.likes?.length || 0} className="anim-pop inline-block">👍 {p.likes?.length || 0}</span>
+              {' '}• 💬 {n} answer{n === 1 ? '' : 's'}
+            </p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button className="btn-ghost text-sm !py-1" onClick={() => likeQ(p._id)}>👍 Like question</button>
+              {n > 2 && (
+                <button className="btn-ghost text-sm !py-1" onClick={() => setExpanded({ ...expanded, [p._id]: !isOpen })}>
+                  {isOpen ? 'Hide answers ▲' : `View all ${n} answers ▼`}
+                </button>
+              )}
+            </div>
+            {shown.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {shown.map(a => <Answer key={a._id} qid={p._id} a={a} user={user} onLike={likeA} />)}
+              </div>
+            )}
+            {user ? (
+              <div className="flex gap-2 mt-3">
+                <input
+                  className="input" placeholder="Write your answer…" value={drafts[p._id] || ''}
+                  onChange={e => setDrafts({ ...drafts, [p._id]: e.target.value })}
+                  onKeyDown={e => e.key === 'Enter' && answer(p._id)} maxLength={1000}
+                />
+                <button className="btn-primary shrink-0" onClick={() => answer(p._id)}>Answer</button>
+              </div>
+            ) : (
+              <p className="text-xs opacity-60 mt-3"><Link to="/auth" className="text-brand-600">Log in</Link> to answer.</p>
+            )}
           </div>
-          <div className="mt-2 space-y-1 text-sm">{p.comments?.slice(-3).map((c, i) => <p key={i}><Link to={`/profile/${c.author}`} className="font-bold text-brand-600 hover:underline">{c.author}</Link>: {c.text}</p>)}</div>
-        </div>
-      ))}
+        );
+      })}
+      {posts.length === 0 && <div className="card text-sm opacity-60">No questions yet — ask the first one! ☝️</div>}
       {hasMore && <button className="btn-ghost w-full" onClick={() => load(false)}>Load more</button>}
     </div>
   );

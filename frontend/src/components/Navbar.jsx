@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 
 const tabs = [
   { to: '/', label: 'Home', icon: <path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1Z" /> },
-  { to: '/discussions', label: 'Discuss', icon: <><rect x="3" y="5" width="18" height="12" rx="3" /><path d="M9 21l3-4" /></> },
+  { to: '/discussions', label: 'Q&A', icon: <><rect x="3" y="5" width="18" height="12" rx="3" /><path d="M9 21l3-4" /></> },
   { to: '/chat', label: 'Chat', icon: <><circle cx="12" cy="12" r="9" /><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" /></> },
   { to: '/dms', label: 'DMs', icon: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 8 6 8-6" /></> },
   { to: '/pyq', label: 'PYQs', icon: <><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H19v17H7.5A2.5 2.5 0 0 0 5 21.5v-17Z" /><path d="M5 17h14" /></> },

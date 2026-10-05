@@ -26,13 +26,17 @@ module.exports = (io) => {
       Discussion.countDocuments(filter),
       Discussion.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).lean()
     ]);
+    // Quora-style: best (most liked) answers first inside each question
+    for (const d of items) {
+      (d.comments || []).sort((a, b) => (b.likes || []).length - (a.likes || []).length);
+    }
     res.set('X-Total-Count', String(total));
     res.json(items);
   });
   router.post('/', authMiddleware, actionRate('write'), async (req, res) => {
     const title = toStr(req.body.title, 150);
     const content = toStr(req.body.content, 5000);
-    if (!title || !content) return res.status(400).json({ error: 'Title and content required.' });
+    if (!title) return res.status(400).json({ error: 'Question title required.' });
     if (containsAbuse(title) || containsAbuse(content)) return res.status(400).json({ error: 'Please keep it respectful — post blocked.' });
     if (duplicateText(`post:${req.user.id}`, `${title}\n${content}`, 5 * 60 * 1000)) {
       return res.status(429).json({ error: 'You already posted that — no need to send it twice.' });
@@ -52,16 +56,30 @@ module.exports = (io) => {
   });
   router.post('/:id/comments', authMiddleware, actionRate('write'), async (req, res) => {
     const text = toStr(req.body.text, 1000);
-    if (!text) return res.status(400).json({ error: 'Comment required.' });
-    if (containsAbuse(text)) return res.status(400).json({ error: 'Please keep it respectful — comment blocked.' });
+    if (!text) return res.status(400).json({ error: 'Answer text required.' });
+    if (containsAbuse(text)) return res.status(400).json({ error: 'Please keep it respectful — answer blocked.' });
     if (duplicateText(`comment:${req.user.id}`, text)) {
-      return res.status(429).json({ error: 'You already sent that comment.' });
+      return res.status(429).json({ error: 'You already sent that answer.' });
     }
     const d = await Discussion.findById(req.params.id);
     if (!d) return res.status(404).json({ error: 'Not found.' });
-    d.comments.push({ author: req.user.username, authorId: req.user.id, text });
+    d.comments.push({ author: req.user.username, authorId: req.user.id, text, likes: [] });
     await d.save();
     notify(io, { recipient: d.author, type: 'comment', fromUser: req.user.username, refId: d._id.toString(), text: `${req.user.username} commented on "${d.title}"` });
+    res.json(d);
+  });
+  // Quora-style answer upvote: POST /api/discussions/:id/comments/:commentId/like
+  router.post('/:id/comments/:commentId/like', authMiddleware, actionRate('like'), async (req, res) => {
+    const d = await Discussion.findById(req.params.id);
+    if (!d) return res.status(404).json({ error: 'Not found.' });
+    const c = d.comments.id(req.params.commentId);
+    if (!c) return res.status(404).json({ error: 'Answer not found.' });
+    if (!Array.isArray(c.likes)) c.likes = [];
+    const i = c.likes.indexOf(req.user.username);
+    let liked = false;
+    if (i === -1) { c.likes.push(req.user.username); liked = true; } else c.likes.splice(i, 1);
+    await d.save();
+    if (liked) notify(io, { recipient: c.author, type: 'like', fromUser: req.user.username, refId: d._id.toString(), text: `${req.user.username} liked your answer on "${d.title}"` });
     res.json(d);
   });
   router.delete('/:id', authMiddleware, async (req, res) => {
