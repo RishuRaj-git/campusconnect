@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dms
+
+Sitemap: https://campusconnect-mlfb.onrender.com/sitemap.xml

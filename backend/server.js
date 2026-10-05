@@ -120,7 +120,28 @@ app.use('/api/exams', require('./routes/exams'));
 // Unknown /api route → JSON (not the SPA fallback below)
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 
-// Single-service deploy: serve the built frontend (../frontend/dist) if present.
+// Dynamic sitemap for Google: static pages + fresh public content
+// (questions, teachers, exams). Must sit BEFORE the static/SPA serving below.
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const base = (process.env.SITE_URL || 'https://campusconnect-mlfb.onrender.com').replace(/\/$/, '');
+    const Discussion = require('./models/Discussion');
+    const { Teacher } = require('./models/Teacher');
+    const [ds, ts] = await Promise.all([
+      Discussion.find().sort({ updatedAt: -1 }).limit(200).select('_id updatedAt').lean(),
+      Teacher.find().sort({ updatedAt: -1 }).limit(200).select('_id updatedAt').lean()
+    ]);
+    const urls = [
+      '', '/auth', '/discussions', '/chat', '/pyq', '/teachers', '/exams', '/privacy'
+    ].map((p) => `  <url><loc>${base}${p || '/'}</loc></url>`).join('\n');
+    const dUrls = ds.map((d) => `  <url><loc>${base}/discussions</loc><lastmod>${d.updatedAt.toISOString().split('T')[0]}</lastmod></url>`).join('\n');
+    const tUrls = ts.map((t) => `  <url><loc>${base}/teachers/${t._id}</loc><lastmod>${t.updatedAt.toISOString().split('T')[0]}</lastmod></url>`).join('\n');
+    res.header('Content-Type', 'application/xml');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n${dUrls}\n${tUrls}\n</urlset>`);
+  } catch (e) {
+    res.status(500).send('sitemap unavailable');
+  }
+});
 // Split deploy (Vercel frontend + this API) also works — same-origin /api is
 // used automatically when no VITE_SERVER_URL is set.
 const webDist = path.join(__dirname, '..', 'frontend', 'dist');
