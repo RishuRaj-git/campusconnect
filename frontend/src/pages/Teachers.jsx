@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api, { SERVER_URL, downloadPyq } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 export const DIMS = [
   ['teaching', 'Teaching clarity'],
@@ -29,6 +30,7 @@ function Bar({ label, value }) {
 
 export function Teachers() {
   const { user } = useAuth();
+  usePageMeta({ title: 'Teachers', description: 'Teacher ratings, reviews and teacher-shared notes on CampusConnect.' });
   const [items, setItems] = useState([]);
   const [depts, setDepts] = useState([]);
   const [q, setQ] = useState('');
@@ -101,6 +103,7 @@ export function TeacherDetail() {
 
   const load = async () => setD((await api.get(`/teachers/${id}`)).data);
   useEffect(() => { load(); }, [id]);
+  usePageMeta(d ? { title: `${d.teacher.name} — rating & notes`, description: `Ratings, reviews and notes for ${d.teacher.name} on CampusConnect.` } : { title: 'Teacher' });
 
   const rate = async (e) => {
     e.preventDefault();

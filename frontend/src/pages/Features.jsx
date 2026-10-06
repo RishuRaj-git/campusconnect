@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import api, { SERVER_URL, downloadPyq } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 export const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -38,6 +39,7 @@ function useAutoScroll(dep) {
 
 export function Chat() {
   const { user, socket } = useAuth();
+  usePageMeta({ title: 'Live Chat', description: 'Join the live campus group chat on CampusConnect.' });
   const [msgs, setMsgs] = useState([]);
   const [text, setText] = useState('');
   const [note, setNote] = useState('');
@@ -97,6 +99,7 @@ export function Chat() {
 
 export function DMs() {
   const { user, socket } = useAuth();
+  usePageMeta({ title: 'Messages', noindex: true });
   const [convos, setConvos] = useState([]);
   const [active, setActive] = useState(null);
   const [msgs, setMsgs] = useState([]);
@@ -172,6 +175,7 @@ export function DMs() {
 
 export function PYQ() {
   const { user, isAdmin } = useAuth();
+  usePageMeta({ title: 'PYQ Bank', description: 'Browse and download previous year question papers by branch, subject and year.' });
   const [items, setItems] = useState([]);
   const [meta, setMeta] = useState({ branches: [], subjects: [], years: [] });
   const [f, setF] = useState({ branch: '', subject: '', year: '' });
@@ -273,6 +277,7 @@ export function Profile() {
   const [form, setForm] = useState({ branch: '', semester: '', year: '', enrollmentNo: '', bio: '' });
   const viewing = paramName || user;
   const own = user && viewing === user;
+  usePageMeta(viewing ? { title: `${viewing}'s profile`, description: `${viewing} on CampusConnect — posts, PYQs and branches.` } : { noindex: true });
   useEffect(() => {
     if (!viewing) return;
     setMissing(false);
@@ -333,6 +338,7 @@ export function Profile() {
 }
 
 export function Admin() {
+  usePageMeta({ title: 'Admin', noindex: true });
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [posts, setPosts] = useState([]);

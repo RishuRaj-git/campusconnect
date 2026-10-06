@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 export const CONTACT_EMAIL = 'rishurajcusb@gmail.com';
 export const MAKER = 'Rishu Raj';
 
 export function PrivacyPolicy() {
+  usePageMeta({ title: 'Privacy Policy', description: 'CampusConnect privacy policy: what data we collect and how it is used.' });
   return (
     <div className="card max-w-2xl mx-auto space-y-4 anim-fade-up">
       <h1 className="font-display font-bold text-2xl">Privacy Policy</h1>

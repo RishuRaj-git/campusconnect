@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 export function useNow(step = 1000) {
   const [now, setNow] = useState(() => Date.now());
@@ -109,6 +110,7 @@ export function ExamCountdown() {
 
 export function ExamsPage() {
   const { isAdmin } = useAuth();
+  usePageMeta({ title: 'Exam Season', description: 'Semester exam dates and live countdowns on CampusConnect.' });
   const now = useNow(30000);
   const [exams, setExams] = useState([]);
   const [showAll, setShowAll] = useState(false);

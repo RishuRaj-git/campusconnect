@@ -3,8 +3,10 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { ExamCountdown } from './Exams';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 export function AuthPage() {
+  usePageMeta({ title: 'Login', noindex: true });
   const [mode, setMode] = useState('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -42,6 +44,7 @@ export function AuthPage() {
 }
 
 export function Home() {
+  usePageMeta({ title: 'Where your campus talks', description: 'CampusConnect: live chat, Q&A, PYQ bank, teacher ratings and exam countdowns for your campus.' });
   return (
     <div className="space-y-4">
       <div className="card bg-gradient-to-br from-brand-600 to-brand-900 text-white border-0">
@@ -91,6 +94,7 @@ function Answer({ qid, a, user, onLike }) {
 
 export function Discussions() {
   const { user } = useAuth();
+  usePageMeta({ title: 'Campus Queries', description: 'Ask questions, write answers and upvote the best ones — campus Q&A forum.' });
   const [posts, setPosts] = useState([]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
