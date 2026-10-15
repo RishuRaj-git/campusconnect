@@ -282,22 +282,21 @@ export function PYQ() {
     try { await downloadPyq(id); load(true); }
     catch (err) { alert(err.response?.data?.error || 'Login required to download'); }
   };
-  const [viewUrls, setViewUrls] = useState({}); // pyqId -> stream url (images)
-  const [pageSets, setPageSets] = useState({}); // pyqId -> [{n, url}] (Scribd-style PDF pages)
+  const [viewUrls, setViewUrls] = useState({}); // pyqId -> stream url
   const [expandedId, setExpandedId] = useState(null);
   const [viewLoading, setViewLoading] = useState(null);
   const openViewer = async (p) => {
-    // PDFs read as stacked page images (Scribd-style, zero plugins/iframes);
-    // images open directly. Short-lived token flow stays for Save/downloads.
+    // Images open right away; PDFs go through our viewer stream
+    // (correct inline type + short-lived token — the iframe can't send JWT).
     if (fileKind(p.fileName) === 'pdf') {
       setViewLoading(p._id);
       try {
-        const { data } = await api.get(`/pyq/${p._id}/pages`);
-        if (!data.pages?.length) throw new Error('no pages');
-        setPageSets((v) => ({ ...v, [p._id]: data.pages }));
+        const { data } = await api.post(`/pyq/${p._id}/view-token`);
+        setViewUrls((v) => ({ ...v, [p._id]: `${SERVER_URL}/api/pyq/${p._id}/view?t=${data.token}` }));
         setExpandedId(p._id);
       } catch {
-        alert('Pages are still being prepared — try Save instead.');
+        setViewUrls((v) => ({ ...v, [p._id]: absUrl(p.fileUrl) }));
+        setExpandedId(p._id);
       } finally {
         setViewLoading(null);
       }
@@ -355,17 +354,15 @@ export function PYQ() {
               {p.fileUrl && <button className="btn-ghost text-sm !py-1" onClick={() => dl(p._id)}>⬇ Save</button>}
               {(isAdmin || p.uploadedBy?.username === user) && <button className="btn-ghost text-sm !py-1 text-red-600" onClick={() => remove(p._id)}>Delete</button>}
             </div>
-            {expandedId === p._id && (viewUrls[p._id] || pageSets[p._id]) && (
+            {expandedId === p._id && viewUrls[p._id] && (
               <div className="mt-3 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 anim-fade-in">
-                {fileKind(p.fileName) === 'pdf' && pageSets[p._id] ? (
-                  <div className="max-h-[75vh] overflow-y-auto bg-slate-200 dark:bg-slate-950 space-y-2 p-2">
-                    {pageSets[p._id].map(pg => (
-                      <figure key={pg.n} className="bg-white rounded-lg overflow-hidden shadow-sm">
-                        <img src={pg.url} alt={`Page ${pg.n}`} loading="lazy" className="w-full" />
-                        <figcaption className="text-center text-[11px] opacity-50 py-1">— {pg.n} —</figcaption>
-                      </figure>
-                    ))}
-                  </div>
+                {fileKind(p.fileName) === 'pdf' ? (
+                  <>
+                    <iframe src={viewUrls[p._id]} title={p.fileName} className="w-full h-[70vh] bg-white" />
+                    <a href={viewUrls[p._id]} target="_blank" rel="noopener" className="block text-center text-xs text-brand-600 font-semibold py-1.5 bg-slate-50 dark:bg-slate-950 hover:underline">
+                      Trouble reading here? Open full screen ⤢
+                    </a>
+                  </>
                 ) : (
                   <img src={viewUrls[p._id]} alt={p.fileName} className="w-full max-h-[75vh] object-contain bg-slate-50 dark:bg-slate-950" />
                 )}
