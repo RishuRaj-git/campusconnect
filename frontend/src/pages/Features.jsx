@@ -357,7 +357,12 @@ export function PYQ() {
             {expandedId === p._id && viewUrls[p._id] && (
               <div className="mt-3 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 anim-fade-in">
                 {fileKind(p.fileName) === 'pdf' ? (
-                  <iframe src={viewUrls[p._id]} title={p.fileName} className="w-full h-[75vh] bg-white" />
+                  <>
+                    <iframe src={viewUrls[p._id]} title={p.fileName} className="w-full h-[70vh] bg-white" />
+                    <a href={viewUrls[p._id]} target="_blank" rel="noopener" className="block text-center text-xs text-brand-600 font-semibold py-1.5 bg-slate-50 dark:bg-slate-950 hover:underline">
+                      Trouble reading here? Open full screen ⤢
+                    </a>
+                  </>
                 ) : (
                   <img src={viewUrls[p._id]} alt={p.fileName} className="w-full max-h-[75vh] object-contain bg-slate-50 dark:bg-slate-950" />
                 )}
