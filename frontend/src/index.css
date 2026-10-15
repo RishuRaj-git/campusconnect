@@ -98,6 +98,9 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .tab-item svg { @apply w-6 h-6; }
 .tab-dot { @apply w-1 h-1 rounded-full bg-brand-600 dark:bg-accent-400 mt-0.5; }
 
+/* In-house file viewer: keep PDF pages inside the modal on small screens */
+.react-pdf__Page canvas { max-width: 100% !important; height: auto !important; }
+
 @media (prefers-reduced-motion: reduce) {
   .page-enter, .anim-fade-up, .anim-fade-in, .anim-slide-in, .anim-pop, .theme-icon { animation: none; }
 }

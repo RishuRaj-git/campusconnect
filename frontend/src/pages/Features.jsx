@@ -3,6 +3,9 @@ import { Link, useSearchParams, useParams, useNavigate } from 'react-router-dom'
 import api, { SERVER_URL, downloadPyq } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { usePageMeta } from '../hooks/usePageMeta';
+import ViewerModal, { fileKind } from '../components/ViewerModal';
+
+export const absUrl = (u) => (u && u.startsWith('http') ? u : `${SERVER_URL}${u || ''}`);
 
 export const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -154,7 +157,7 @@ export function DMs() {
   };
   const saveFile = async (m) => {
     try {
-      const res = await fetch(m.fileUrl);
+      const res = await fetch(absUrl(m.fileUrl));
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const a = document.createElement('a');
@@ -163,8 +166,10 @@ export function DMs() {
       document.body.appendChild(a);
       a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-    } catch { window.open(m.fileUrl, '_blank', 'noopener'); }
+    } catch { window.open(absUrl(m.fileUrl), '_blank', 'noopener'); }
   };
+  const [viewing, setViewing] = useState(null);
+  const openViewer = (m) => setViewing({ url: absUrl(m.fileUrl), name: m.fileName || 'file', save: () => saveFile(m) });
   if (!user) return <div className="card">Login to use DMs.</div>;
   return (
     <div className="grid md:grid-cols-3 gap-3">
@@ -193,10 +198,10 @@ export function DMs() {
                 <div key={m._id || i} className={grouped ? 'mt-1' : 'mt-3 first:mt-0'}>
                   <Bubble mine={mine} time={m.createdAt ? fmtTime(m.createdAt) : ''}>
                     {m.fileUrl && (isImg
-                      ? <img src={m.fileUrl} alt={m.fileName} className="rounded-xl max-h-56 object-cover cursor-pointer" onClick={() => saveFile(m)} loading="lazy" />
-                      : <button onClick={() => saveFile(m)} className="flex items-center gap-2 text-left hover:opacity-80">
+                      ? <img src={absUrl(m.fileUrl)} alt={m.fileName} className="rounded-xl max-h-56 object-cover cursor-pointer" onClick={() => openViewer(m)} loading="lazy" />
+                      : <button onClick={() => openViewer(m)} className="flex items-center gap-2 text-left hover:opacity-80">
                           <span className="text-xl">📄</span>
-                          <span><span className="block font-semibold text-[13px] break-all">{m.fileName}</span><span className="block text-[11px] opacity-70 underline">Tap to save to device ⬇</span></span>
+                          <span><span className="block font-semibold text-[13px] break-all">{m.fileName}</span><span className="block text-[11px] opacity-70 underline">{fileKind(m.fileName) === 'pdf' ? 'Tap to read 👁' : 'Tap to open 👁'}</span></span>
                         </button>)}
                     {m.text && <p className={m.fileUrl ? 'mt-1' : ''}>{m.text}</p>}
                   </Bubble>
@@ -220,6 +225,7 @@ export function DMs() {
           </form>
         </>)}
       </div>
+      {viewing && <ViewerModal file={viewing} onSave={viewing.save} onClose={() => setViewing(null)} />}
     </div>
   );
 }
@@ -267,6 +273,7 @@ export function PYQ() {
     try { await downloadPyq(id); load(true); }
     catch (err) { alert(err.response?.data?.error || 'Login required to download'); }
   };
+  const [viewing, setViewing] = useState(null); // {url, name} for in-house viewer
   return (
     <div className="space-y-3">
       {teacherId && (
@@ -307,14 +314,24 @@ export function PYQ() {
             <p className="text-xs opacity-60 mt-0.5">{p.branch} • {p.subject} • {p.year}{p.semester ? ` • Sem ${p.semester}` : ''}{p.examType && p.examType !== 'Other' ? ` • ${p.examType}` : ''} • ⬇ {p.downloads} • by {p.uploadedBy?.username || 'unknown'}</p>
             {p.teacher && <p className="text-xs mt-0.5">👩‍🏫 <Link to={`/teachers/${p.teacher._id}`} className="text-brand-600">{p.teacher.name}</Link></p>}
             {p.notes && <p className="text-sm mt-1">{p.notes}</p>}
-            <div className="flex gap-2 mt-2">
-              {p.fileUrl && <button className="btn-ghost text-sm !py-1" onClick={() => dl(p._id)}>Download / View →</button>}
+            <div className="flex flex-wrap gap-2 mt-2">
+              {p.fileUrl && ['image', 'pdf'].includes(fileKind(p.fileName)) && (
+                <button className="btn-primary text-sm !py-1" onClick={() => setViewing({ url: absUrl(p.fileUrl), name: p.fileName || p.title })}>👁 View</button>
+              )}
+              {p.fileUrl && <button className="btn-ghost text-sm !py-1" onClick={() => dl(p._id)}>⬇ Save</button>}
               {(isAdmin || p.uploadedBy?.username === user) && <button className="btn-ghost text-sm !py-1 text-red-600" onClick={() => remove(p._id)}>Delete</button>}
             </div>
           </div>
         ))}
       </div>
       {hasMore && <button className="btn-ghost w-full" onClick={() => load(false)}>Load more</button>}
+      {viewing && (
+        <ViewerModal
+          file={viewing}
+          onClose={() => setViewing(null)}
+          onSave={() => { const id = items.find(p => absUrl(p.fileUrl) === viewing.url)?._id; if (id) dl(id); }}
+        />
+      )}
     </div>
   );
 }
