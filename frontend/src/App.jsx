@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, Link } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
+import Intro from './components/Intro';
 import { AuthPage, Home, Discussions } from './pages/Core';
 import { Chat, DMs, PYQ, Profile, Admin } from './pages/Features';
 import { Teachers, TeacherDetail } from './pages/Teachers';
@@ -34,9 +36,11 @@ function AnimatedRoutes() {
 }
 
 export default function App() {
+  const [intro, setIntro] = useState(true);
   return (
     <AuthProvider>
       <BrowserRouter>
+        {intro && <Intro onDone={() => setIntro(false)} />}
         <div aria-hidden className="fixed inset-0 -z-10 overflow-hidden">
           <div className="orb orb-a" />
           <div className="orb orb-b" />

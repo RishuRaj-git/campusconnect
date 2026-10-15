@@ -98,6 +98,23 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .tab-item svg { @apply w-6 h-6; }
 .tab-dot { @apply w-1 h-1 rounded-full bg-brand-600 dark:bg-accent-400 mt-0.5; }
 
+/* ---------- Apple-style opening wordmark ---------- */
+@keyframes cc-letter-in { from { opacity: 0; transform: translateY(.55em); filter: blur(12px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes cc-sheen { 0% { transform: translateX(-130%) skewX(-18deg); } 55%, 100% { transform: translateX(240%) skewX(-18deg); } }
+@keyframes cc-tag-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.intro-eyebrow { @apply text-xs uppercase tracking-[.35em] text-slate-400 mb-3; animation: cc-tag-in .6s ease .05s both; }
+.intro-word { position: relative; display: inline-block; overflow: hidden; font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+  font-size: clamp(2.4rem, 9vw, 4.5rem); letter-spacing: -0.02em; line-height: 1.1;
+  background: linear-gradient(100deg, #a5b4fc, #fff 45%, #a3e635 70%, #a5b4fc); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.intro-letter { display: inline-block; opacity: 0; animation: cc-letter-in .55s cubic-bezier(.22,.8,.3,1) forwards; }
+.intro-sheen { position: absolute; top: 0; bottom: 0; width: 45%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  animation: cc-sheen 1.6s ease .5s both; pointer-events: none; }
+.intro-tag { @apply text-slate-400 mt-3 text-sm sm:text-base; animation: cc-tag-in .7s ease 1.15s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-letter, .intro-sheen, .intro-tag, .intro-eyebrow { animation-duration: .01s; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .page-enter, .anim-fade-up, .anim-fade-in, .anim-slide-in, .anim-pop, .theme-icon { animation: none; }
 }
