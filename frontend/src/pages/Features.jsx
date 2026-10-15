@@ -282,21 +282,28 @@ export function PYQ() {
     try { await downloadPyq(id); load(true); }
     catch (err) { alert(err.response?.data?.error || 'Login required to download'); }
   };
-  const [viewing, setViewing] = useState(null); // {url, name} for in-house viewer
+  const [viewUrls, setViewUrls] = useState({}); // pyqId -> stream url
+  const [expandedId, setExpandedId] = useState(null);
+  const [viewLoading, setViewLoading] = useState(null);
   const openViewer = async (p) => {
-    // Images stream straight from storage; PDFs go through our viewer stream
+    // Images open right away; PDFs go through our viewer stream
     // (correct inline type + short-lived token — the iframe can't send JWT).
     if (fileKind(p.fileName) === 'pdf') {
+      setViewLoading(p._id);
       try {
         const { data } = await api.post(`/pyq/${p._id}/view-token`);
-        setViewing({ url: `${SERVER_URL}/api/pyq/${p._id}/view?t=${data.token}`, name: p.fileName || p.title });
-        return;
+        setViewUrls((v) => ({ ...v, [p._id]: `${SERVER_URL}/api/pyq/${p._id}/view?t=${data.token}` }));
+        setExpandedId(p._id);
       } catch {
-        setViewing({ url: absUrl(p.fileUrl), name: p.fileName || p.title });
-        return;
+        setViewUrls((v) => ({ ...v, [p._id]: absUrl(p.fileUrl) }));
+        setExpandedId(p._id);
+      } finally {
+        setViewLoading(null);
       }
+      return;
     }
-    setViewing({ url: absUrl(p.fileUrl), name: p.fileName || p.title });
+    setViewUrls((v) => ({ ...v, [p._id]: absUrl(p.fileUrl) }));
+    setExpandedId(p._id);
   };
   return (
     <div className="space-y-3">
@@ -340,22 +347,26 @@ export function PYQ() {
             {p.notes && <p className="text-sm mt-1">{p.notes}</p>}
             <div className="flex flex-wrap gap-2 mt-2">
               {p.fileUrl && ['image', 'pdf'].includes(fileKind(p.fileName)) && (
-                <button className="btn-primary text-sm !py-1" onClick={() => openViewer(p)}>👁 View</button>
+                expandedId === p._id
+                  ? <button className="btn-ghost text-sm !py-1" onClick={() => setExpandedId(null)}>▲ Collapse</button>
+                  : <button className="btn-primary text-sm !py-1" onClick={() => openViewer(p)} disabled={viewLoading === p._id}>{viewLoading === p._id ? 'Opening…' : '👁 Read'}</button>
               )}
               {p.fileUrl && <button className="btn-ghost text-sm !py-1" onClick={() => dl(p._id)}>⬇ Save</button>}
               {(isAdmin || p.uploadedBy?.username === user) && <button className="btn-ghost text-sm !py-1 text-red-600" onClick={() => remove(p._id)}>Delete</button>}
             </div>
+            {expandedId === p._id && viewUrls[p._id] && (
+              <div className="mt-3 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 anim-fade-in">
+                {fileKind(p.fileName) === 'pdf' ? (
+                  <iframe src={viewUrls[p._id]} title={p.fileName} className="w-full h-[75vh] bg-white" />
+                ) : (
+                  <img src={viewUrls[p._id]} alt={p.fileName} className="w-full max-h-[75vh] object-contain bg-slate-50 dark:bg-slate-950" />
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
       {hasMore && <button className="btn-ghost w-full" onClick={() => load(false)}>Load more</button>}
-      {viewing && (
-        <ViewerModal
-          file={viewing}
-          onClose={() => setViewing(null)}
-          onSave={() => { const id = items.find(p => absUrl(p.fileUrl) === viewing.url)?._id; if (id) dl(id); }}
-        />
-      )}
     </div>
   );
 }
