@@ -111,6 +111,15 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
   animation: cc-sheen 1.6s ease .5s both; pointer-events: none; }
 .intro-tag { @apply text-slate-400 mt-3 text-sm sm:text-base; animation: cc-tag-in .7s ease 1.15s both; }
 
+/* Fluid wordmark — shared by the splash intro and the home hero */
+.fluid-word { position: relative; display: inline-block; overflow: hidden; font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700; letter-spacing: -0.02em; line-height: 1.08;
+  background: linear-gradient(100deg, #818cf8, #4f46e5 40%, #65a30d 75%, #818cf8);
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+.dark .fluid-word { background: linear-gradient(100deg, #a5b4fc, #fff 45%, #a3e635 70%, #a5b4fc); -webkit-background-clip: text; background-clip: text; }
+.fluid-intro { font-size: clamp(2.4rem, 9vw, 4.5rem); }
+.fluid-hero { font-size: clamp(2.6rem, 10vw, 5rem); }
+
 @media (prefers-reduced-motion: reduce) {
   .intro-letter, .intro-sheen, .intro-tag, .intro-eyebrow { animation-duration: .01s; }
 }

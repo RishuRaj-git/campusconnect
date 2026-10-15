@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
+import FluidWord from './FluidWord';
 
 // Apple-keynote-style opening: the wordmark writes itself letter by letter
 // (rise + de-blur stagger), a light sweep crosses it, then the curtain lifts.
 export default function Intro({ onDone }) {
   const [leaving, setLeaving] = useState(false);
-  const word = 'CampusConnect';
 
   useEffect(() => {
     const t1 = setTimeout(() => setLeaving(true), 1900);
@@ -21,12 +21,7 @@ export default function Intro({ onDone }) {
     >
       <div className="text-center px-6">
         <p className="intro-eyebrow">Welcome to</p>
-        <h1 className="intro-word" aria-label={word}>
-          {word.split('').map((ch, i) => (
-            <span key={i} className="intro-letter" style={{ animationDelay: `${0.15 + i * 0.055}s` }}>{ch}</span>
-          ))}
-          <span className="intro-sheen" aria-hidden />
-        </h1>
+        <h1><FluidWord size="intro" delay={0.15} /></h1>
         <p className="intro-tag">Where your campus talks.</p>
       </div>
     </div>

@@ -3,6 +3,7 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { ExamCountdown } from './Exams';
+import FluidWord from '../components/FluidWord';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 export function AuthPage() {
@@ -47,13 +48,13 @@ export function Home() {
   usePageMeta({ title: 'Where your campus talks', description: 'CampusConnect: live chat, Q&A, PYQ bank, teacher ratings and exam countdowns for your campus.' });
   return (
     <div className="space-y-4">
-      <div className="card bg-gradient-to-br from-brand-600 to-brand-900 text-white border-0">
-        <p className="text-xs uppercase tracking-widest opacity-80">CampusConnect</p>
-        <h1 className="font-display text-3xl font-bold">Where your campus talks.</h1>
-        <p className="opacity-90 mt-1">Live chat, discussions, DMs and PYQs — in one clean app.</p>
-        <div className="flex flex-wrap gap-2 mt-4">
-          <Link to="/chat" className="bg-accent-400 text-slate-950 font-semibold rounded-xl px-4 py-2 active:scale-95 transition">Open Chat</Link>
-          <Link to="/pyq" className="border border-white/40 rounded-xl px-4 py-2 active:scale-95 transition">Browse PYQs</Link>
+      <div className="text-center pt-6 pb-2 anim-fade-up">
+        <p className="text-xs uppercase tracking-[.35em] opacity-60 mb-2">Welcome to</p>
+        <h1><FluidWord size="hero" delay={0.1} /></h1>
+        <p className="opacity-70 mt-2 text-base sm:text-lg">Where your campus talks.</p>
+        <div className="flex flex-wrap justify-center gap-2 mt-4">
+          <Link to="/chat" className="btn-primary">Open Chat</Link>
+          <Link to="/pyq" className="btn-ghost">Browse PYQs</Link>
         </div>
       </div>
       <ExamCountdown />
