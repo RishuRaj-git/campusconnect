@@ -227,23 +227,38 @@ io.on('connection', async (socket) => {
     try { await ChatMessage.create(payload); } catch (e) { console.error(e); }
   });
 
-  socket.on('dm message', async ({ conversationId, toUsername, text }) => {
+  socket.on('dm message', async ({ conversationId, toUsername, text, attachment }) => {
     const from = socket.data.username;
-    if (!from || !text || !conversationId) return;
+    if (!from || !conversationId) return;
+    const cleanDm = String(text || '').slice(0, 2000);
+    // Attachment allowed ONLY if it came from POST /dms/upload by this same
+    // user moments ago (registry claim) — kills malicious-URL injection.
+    let file = null;
+    if (attachment && attachment.publicId) {
+      const dmsRouter = require('./routes/dms');
+      file = dmsRouter.claimUpload ? dmsRouter.claimUpload(String(attachment.publicId), from) : null;
+      if (!file) return; // forged or expired attachment — drop silently
+    }
+    if (!cleanDm && !file) return;
     if (!msgBucket.take(`dm:${from}`)) { socket.emit('chat message blocked', { reason: 'Slow down — you are sending messages too fast.' }); return; }
     if ((await User.findOne({ username: from }).select('isBanned'))?.isBanned) {
       socket.emit('chat message blocked', { reason: 'Your account has been suspended.' });
       socket.disconnect(true);
       return;
     }
-    const cleanDm = String(text).slice(0, 2000);
     if (containsAbuse(cleanDm)) { socket.emit('chat message blocked', { reason: 'Please keep it respectful.' }); return; }
     try {
       const convo = await Conversation.findById(conversationId);
       if (!convo) return;
-      const dm = await DirectMessage.create({ conversationId, sender: from, text: cleanDm });
-      await Conversation.findByIdAndUpdate(conversationId, { lastMessage: cleanDm, lastMessageAt: new Date() });
-      const payload = { conversationId, _id: dm._id, sender: from, text: cleanDm, createdAt: dm.createdAt };
+      if (!convo.participants.some((p) => p.toString() === socket.data.user?.id)) return; // not your chat
+      const dm = await DirectMessage.create({
+        conversationId, sender: from, text: cleanDm,
+        ...(file ? { fileUrl: file.fileUrl, fileName: file.fileName, publicId: file.publicId, resourceType: file.resourceType } : {})
+      });
+      const preview = cleanDm || `📎 ${file.fileName}`;
+      await Conversation.findByIdAndUpdate(conversationId, { lastMessage: preview, lastMessageAt: new Date() });
+      const payload = { conversationId, _id: dm._id, sender: from, text: cleanDm, createdAt: dm.createdAt,
+        ...(file ? { fileUrl: file.fileUrl, fileName: file.fileName } : {}) };
       io.to(`user:${toUsername}`).to(`user:${from}`).emit('dm message', payload);
       if (toUsername !== from) {
         const n = await Notification.create({ recipient: toUsername, type: 'dm', fromUser: from, refId: conversationId.toString(), text: `${from} sent you a message` });

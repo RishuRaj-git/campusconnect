@@ -25,9 +25,12 @@ function enabled() {
 function uploadBuffer(buffer, { folder = 'campusconnect/pyqs', filename = 'file', resourceType = 'auto' } = {}) {
   const ext = (filename.match(/\.[a-zA-Z0-9]{2,5}$/) || [''])[0].toLowerCase();
   const base = filename.replace(/\.[a-zA-Z0-9]{2,5}$/, '').replace(/[^a-zA-Z0-9-_]/g, '_').slice(-80) || 'file';
+  // Raw PDFs stay extensionless (this account 401s `.pdf`-suffixed delivery);
+  // images keep theirs. Real names travel in DB `fileName`, restored on download.
+  const publicId = (resourceType === 'raw' ? `${Date.now()}-${base}` : `${Date.now()}-${base}${ext}`).slice(0, 150);
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: resourceType, public_id: `${Date.now()}-${base}`.slice(0, 150) },
+      { folder, resource_type: resourceType, public_id: publicId },
       (err, result) => {
         if (err) return reject(err);
         resolve({ url: result.secure_url, publicId: result.public_id, resourceType: result.resource_type, ext });

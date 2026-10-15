@@ -129,10 +129,41 @@ export function DMs() {
   }, [user]);
   const send = (e) => {
     e.preventDefault();
-    if (!text.trim() || !active) return;
+    if ((!text.trim() && !pending) || !active) return;
     if (!socket || !socket.connected) { alert('Connecting… wait a second and retry'); return; }
-    socket.emit('dm message', { conversationId: active._id, toUsername: active.otherUser.username, text });
+    socket.emit('dm message', {
+      conversationId: active._id, toUsername: active.otherUser.username, text: text.trim(),
+      ...(pending ? { attachment: { publicId: pending.publicId } } : {})
+    });
     setText('');
+    setPending(null);
+  };
+  const [pending, setPending] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const attach = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUploading(true);
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const { data } = await api.post('/dms/upload', fd);
+      setPending(data); // {fileUrl, fileName, publicId, ...} — sent with next message
+    } catch (err) { alert(err.response?.data?.error || 'Attachment upload failed'); }
+    finally { setUploading(false); e.target.value = ''; }
+  };
+  const saveFile = async (m) => {
+    try {
+      const res = await fetch(m.fileUrl);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = m.fileName || 'download';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    } catch { window.open(m.fileUrl, '_blank', 'noopener'); }
   };
   if (!user) return <div className="card">Login to use DMs.</div>;
   return (
@@ -157,16 +188,36 @@ export function DMs() {
             {msgs.map((m, i) => {
               const mine = m.sender === user;
               const grouped = i > 0 && msgs[i - 1].sender === m.sender;
+              const isImg = m.fileUrl && /\.(jpg|jpeg|png|webp|gif)$/i.test(m.fileName || '');
               return (
                 <div key={m._id || i} className={grouped ? 'mt-1' : 'mt-3 first:mt-0'}>
                   <Bubble mine={mine} time={m.createdAt ? fmtTime(m.createdAt) : ''}>
-                    {m.text}
+                    {m.fileUrl && (isImg
+                      ? <img src={m.fileUrl} alt={m.fileName} className="rounded-xl max-h-56 object-cover cursor-pointer" onClick={() => saveFile(m)} loading="lazy" />
+                      : <button onClick={() => saveFile(m)} className="flex items-center gap-2 text-left hover:opacity-80">
+                          <span className="text-xl">📄</span>
+                          <span><span className="block font-semibold text-[13px] break-all">{m.fileName}</span><span className="block text-[11px] opacity-70 underline">Tap to save to device ⬇</span></span>
+                        </button>)}
+                    {m.text && <p className={m.fileUrl ? 'mt-1' : ''}>{m.text}</p>}
                   </Bubble>
                 </div>
               );
             })}
           </div>
-          <form onSubmit={send} className="flex gap-2 mt-3"><input className="input" value={text} onChange={e => setText(e.target.value)} placeholder="Message..." maxLength={2000} /><button className="btn-primary shrink-0">Send</button></form>
+          {pending && (
+            <div className="flex items-center gap-2 mt-2 text-xs bg-slate-100 dark:bg-slate-800 rounded-xl px-3 py-1.5 anim-fade-in">
+              <span className="truncate">📎 {pending.fileName}</span>
+              <button className="ml-auto shrink-0 opacity-60" onClick={() => setPending(null)}>✕</button>
+            </div>
+          )}
+          <form onSubmit={send} className="flex gap-2 mt-2">
+            <label className="btn-ghost !px-3 shrink-0 cursor-pointer" title="Attach a document">
+              {uploading ? '⏳' : '📎'}
+              <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.txt" onChange={attach} disabled={uploading} />
+            </label>
+            <input className="input" value={text} onChange={e => setText(e.target.value)} placeholder="Message..." maxLength={2000} />
+            <button className="btn-primary shrink-0">Send</button>
+          </form>
         </>)}
       </div>
     </div>

@@ -16,7 +16,14 @@ conversationSchema.index({ participants: 1, lastMessageAt: -1 });
 const directMessageSchema = new mongoose.Schema({
   conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
   sender: { type: String, required: true },
-  text: { type: String, required: true, maxlength: 2000 },
+  text: { type: String, default: '', maxlength: 2000 },
+  // Optional file attachment (Cloudinary-hosted; never touches our disk).
+  // Only publicIds issued by POST /dms/upload are accepted — clients can't
+  // inject arbitrary URLs (phishing shield).
+  fileUrl: { type: String },
+  fileName: { type: String },
+  publicId: { type: String },
+  resourceType: { type: String },
   createdAt: { type: Date, default: Date.now }
 });
 directMessageSchema.index({ conversationId: 1, createdAt: -1 });
