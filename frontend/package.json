@@ -9,10 +9,8 @@
   },
   "dependencies": {
     "axios": "^1.7.2",
-    "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-pdf": "^9.2.1",
     "react-router-dom": "^6.23.1",
     "socket.io-client": "^4.7.5"
   },

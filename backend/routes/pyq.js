@@ -7,10 +7,60 @@ const { authMiddleware } = require('../middleware/auth');
 const { escapeRegExp, toStr } = require('../utils/sanitize');
 const { actionRate } = require('../middleware/actionLimits');
 const { containsAbuse } = require('../utils/profanity');
+const crypto = require('crypto');
 
 const router = express.Router();
-// Memory storage — files stream straight to Cloudinary, never touch disk
-// (local disk is ephemeral on Render/Railway free tiers).
+
+// Short-lived view tokens: the in-app PDF iframe can't send an Authorization
+// header, so it gets a 60-second single-purpose token instead of the JWT.
+const viewTokens = new Map(); // token -> { pyqId, exp }
+function mintViewToken(pyqId) {
+  const t = crypto.randomBytes(16).toString('hex');
+  viewTokens.set(t, { pyqId, exp: Date.now() + 60000 });
+  if (viewTokens.size > 2000) {
+    for (const [k, v] of viewTokens) if (v.exp < Date.now()) viewTokens.delete(k);
+  }
+  return t;
+}
+
+const MIME = { '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
+function mimeFor(name = '') {
+  const m = name.match(/\.[a-zA-Z0-9]{2,5}$/);
+  return MIME[(m || [''])[0].toLowerCase()] || 'application/octet-stream';
+}
+
+router.post('/:id/view-token', authMiddleware, async (req, res) => {
+  const pyq = await PYQ.findById(req.params.id).select('_id fileUrl');
+  if (!pyq?.fileUrl) return res.status(404).json({ error: 'File not found.' });
+  res.json({ token: mintViewToken(pyq._id.toString()) });
+});
+
+// Streams the file with a correct inline Content-Type so the browser renders
+// PDFs natively (no client PDF engine, no CORS/CSP battles — same origin).
+router.get('/:id/view', async (req, res) => {
+  const v = viewTokens.get(String(req.query.t || ''));
+  if (!v || v.exp < Date.now() || v.pyqId !== req.params.id) {
+    return res.status(401).json({ error: 'View link expired. Reopen it.' });
+  }
+  const pyq = await PYQ.findById(req.params.id);
+  if (!pyq?.fileUrl) return res.status(404).json({ error: 'File not found.' });
+  if (pyq.fileUrl.startsWith('/uploads')) {
+    return res.sendFile(path.join(__dirname, '..', pyq.fileUrl.replace('/uploads', 'uploads')));
+  }
+  try {
+    const upstream = await fetch(pyq.fileUrl);
+    if (!upstream.ok) throw new Error('upstream ' + upstream.status);
+    res.setHeader('Content-Type', mimeFor(pyq.fileName));
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    const { Readable } = require('stream');
+    Readable.fromWeb(upstream.body).pipe(res);
+  } catch (e) {
+    console.error('view stream failed:', e.message);
+    res.status(502).json({ error: 'Could not load preview.' });
+  }
+});
+
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (req, file, cb) => /pdf|jpg|jpeg|png/.test(path.extname(file.originalname).toLowerCase()) ? cb(null, true) : cb(new Error('Only PDF/JPG/PNG')) });
 const { enabled: storageEnabled, uploadBuffer, destroyFile } = require('../utils/storage');

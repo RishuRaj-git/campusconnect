@@ -7,6 +7,11 @@ const { authMiddleware } = require('../middleware/auth');
 const { actionRate } = require('../middleware/actionLimits');
 const { containsAbuse } = require('../utils/profanity');
 const { enabled: storageEnabled, uploadBuffer } = require('../utils/storage');
+const crypto = require('crypto');
+
+// Same short-lived view-token pattern as PYQs (see routes/pyq.js).
+const dmViewTokens = new Map(); // token -> { msgId, userId, exp }
+const DM_MIME = { '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
 
 const router = express.Router();
 
@@ -76,6 +81,44 @@ router.post('/upload', authMiddleware, actionRate('upload'), upload.single('file
   } catch (e) {
     console.error('DM upload failed:', e.message);
     res.status(500).json({ error: 'Upload failed. Try again.' });
+  }
+});
+
+router.post('/messages/:msgId/view-token', authMiddleware, async (req, res) => {
+  const m = await DirectMessage.findById(req.params.msgId);
+  if (!m?.fileUrl) return res.status(404).json({ error: 'No attachment.' });
+  const convo = await Conversation.findById(m.conversationId).select('participants');
+  if (!convo || !convo.participants.some((p) => p.toString() === req.user.id)) {
+    return res.status(403).json({ error: 'Not part of this conversation.' });
+  }
+  const t = crypto.randomBytes(16).toString('hex');
+  dmViewTokens.set(t, { msgId: m._id.toString(), userId: req.user.id, exp: Date.now() + 60000 });
+  res.json({ token: t });
+});
+
+router.get('/attachments/:msgId/view', async (req, res) => {
+  const v = dmViewTokens.get(String(req.query.t || ''));
+  if (!v || v.exp < Date.now() || v.msgId !== req.params.msgId) {
+    return res.status(401).json({ error: 'View link expired. Reopen it.' });
+  }
+  const m = await DirectMessage.findById(req.params.msgId);
+  if (!m?.fileUrl) return res.status(404).json({ error: 'No attachment.' });
+  const convo = await Conversation.findById(m.conversationId).select('participants');
+  if (!convo || !convo.participants.some((p) => p.toString() === v.userId)) {
+    return res.status(403).json({ error: 'Not part of this conversation.' });
+  }
+  try {
+    const upstream = await fetch(m.fileUrl);
+    if (!upstream.ok) throw new Error('upstream ' + upstream.status);
+    const ext = (m.fileName || '').match(/\.[a-zA-Z0-9]{2,5}$/);
+    res.setHeader('Content-Type', DM_MIME[(ext || [''])[0].toLowerCase()] || 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    const { Readable } = require('stream');
+    Readable.fromWeb(upstream.body).pipe(res);
+  } catch (e) {
+    console.error('dm view stream failed:', e.message);
+    res.status(502).json({ error: 'Could not load preview.' });
   }
 });
 module.exports = router;

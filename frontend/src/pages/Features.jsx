@@ -169,7 +169,16 @@ export function DMs() {
     } catch { window.open(absUrl(m.fileUrl), '_blank', 'noopener'); }
   };
   const [viewing, setViewing] = useState(null);
-  const openViewer = (m) => setViewing({ url: absUrl(m.fileUrl), name: m.fileName || 'file', save: () => saveFile(m) });
+  const openViewer = async (m) => {
+    if (fileKind(m.fileName) === 'pdf' && m._id) {
+      try {
+        const { data } = await api.post(`/dms/messages/${m._id}/view-token`);
+        setViewing({ url: `${SERVER_URL}/api/dms/attachments/${m._id}/view?t=${data.token}`, name: m.fileName || 'file', save: () => saveFile(m) });
+        return;
+      } catch { /* fall through to direct */ }
+    }
+    setViewing({ url: absUrl(m.fileUrl), name: m.fileName || 'file', save: () => saveFile(m) });
+  };
   if (!user) return <div className="card">Login to use DMs.</div>;
   return (
     <div className="grid md:grid-cols-3 gap-3">
@@ -274,6 +283,21 @@ export function PYQ() {
     catch (err) { alert(err.response?.data?.error || 'Login required to download'); }
   };
   const [viewing, setViewing] = useState(null); // {url, name} for in-house viewer
+  const openViewer = async (p) => {
+    // Images stream straight from storage; PDFs go through our viewer stream
+    // (correct inline type + short-lived token — the iframe can't send JWT).
+    if (fileKind(p.fileName) === 'pdf') {
+      try {
+        const { data } = await api.post(`/pyq/${p._id}/view-token`);
+        setViewing({ url: `${SERVER_URL}/api/pyq/${p._id}/view?t=${data.token}`, name: p.fileName || p.title });
+        return;
+      } catch {
+        setViewing({ url: absUrl(p.fileUrl), name: p.fileName || p.title });
+        return;
+      }
+    }
+    setViewing({ url: absUrl(p.fileUrl), name: p.fileName || p.title });
+  };
   return (
     <div className="space-y-3">
       {teacherId && (
@@ -316,7 +340,7 @@ export function PYQ() {
             {p.notes && <p className="text-sm mt-1">{p.notes}</p>}
             <div className="flex flex-wrap gap-2 mt-2">
               {p.fileUrl && ['image', 'pdf'].includes(fileKind(p.fileName)) && (
-                <button className="btn-primary text-sm !py-1" onClick={() => setViewing({ url: absUrl(p.fileUrl), name: p.fileName || p.title })}>👁 View</button>
+                <button className="btn-primary text-sm !py-1" onClick={() => openViewer(p)}>👁 View</button>
               )}
               {p.fileUrl && <button className="btn-ghost text-sm !py-1" onClick={() => dl(p._id)}>⬇ Save</button>}
               {(isAdmin || p.uploadedBy?.username === user) && <button className="btn-ghost text-sm !py-1 text-red-600" onClick={() => remove(p._id)}>Delete</button>}
