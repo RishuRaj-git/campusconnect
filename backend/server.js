@@ -253,7 +253,7 @@ io.on('connection', async (socket) => {
       if (!convo.participants.some((p) => p.toString() === socket.data.user?.id)) return; // not your chat
       const dm = await DirectMessage.create({
         conversationId, sender: from, text: cleanDm,
-        ...(file ? { fileUrl: file.fileUrl, fileName: file.fileName, publicId: file.publicId, resourceType: file.resourceType } : {})
+        ...(file ? { fileUrl: file.fileUrl, fileName: file.fileName, publicId: file.publicId, resourceType: file.resourceType, rawPublicId: file.rawPublicId, rawUrl: file.rawUrl } : {})
       });
       const preview = cleanDm || `📎 ${file.fileName}`;
       await Conversation.findByIdAndUpdate(conversationId, { lastMessage: preview, lastMessageAt: new Date() });

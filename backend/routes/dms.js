@@ -72,10 +72,16 @@ router.post('/upload', authMiddleware, actionRate('upload'), upload.single('file
   if (!req.file) return res.status(400).json({ error: 'No file.' });
   if (!storageEnabled()) return res.status(500).json({ error: 'File storage is not configured.' });
   const ext = path.extname(req.file.originalname).toLowerCase();
-  const needsRaw = ['.pdf', '.doc', '.docx', '.txt'].includes(ext); // this account 401s .pdf-suffixed delivery
   try {
-    const up = await uploadBuffer(req.file.buffer, { folder: 'campusconnect/dm', filename: req.file.originalname, resourceType: needsRaw ? 'raw' : 'auto' });
-    const info = { fileUrl: up.url, fileName: req.file.originalname, publicId: up.publicId, resourceType: up.resourceType };
+    const first = await uploadBuffer(req.file.buffer, { folder: 'campusconnect/dm', filename: req.file.originalname, resourceType: 'auto' });
+    const info = { fileUrl: first.url, fileName: req.file.originalname, publicId: first.publicId, resourceType: first.resourceType };
+    if (ext === '.pdf') {
+      // Dual-store like PYQs: image copy renders pages, raw copy downloads
+      // (this account 401s `.pdf`-suffixed delivery URLs).
+      const raw = await uploadBuffer(req.file.buffer, { folder: 'campusconnect/dm', filename: req.file.originalname, resourceType: 'raw' });
+      info.rawPublicId = raw.publicId;
+      info.rawUrl = raw.url;
+    }
     registerUpload(info, req.user.username);
     res.json(info);
   } catch (e) {
@@ -108,7 +114,7 @@ router.get('/attachments/:msgId/view', async (req, res) => {
     return res.status(403).json({ error: 'Not part of this conversation.' });
   }
   try {
-    const upstream = await fetch(m.fileUrl);
+    const upstream = await fetch(m.rawUrl || m.fileUrl);
     if (!upstream.ok) throw new Error('upstream ' + upstream.status);
     const ext = (m.fileName || '').match(/\.[a-zA-Z0-9]{2,5}$/);
     res.setHeader('Content-Type', DM_MIME[(ext || [''])[0].toLowerCase()] || 'application/octet-stream');

@@ -10,8 +10,11 @@ const pyqSchema = new mongoose.Schema({
   notes: { type: String, trim: true },
   fileUrl: { type: String },
   fileName: { type: String },
-  publicId: { type: String }, // Cloudinary public_id (new uploads); absent for legacy local files
-  resourceType: { type: String }, // Cloudinary type: image | raw | video (needed for delete)
+  publicId: { type: String }, // primary asset (images: the file; PDFs: image copy for page previews)
+  resourceType: { type: String },
+  rawPublicId: { type: String }, // PDFs only: extensionless raw copy that actually downloads
+  rawUrl: { type: String },
+  pageCount: { type: Number, default: 1 },
   uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }, // optional link
   downloads: { type: Number, default: 0 }

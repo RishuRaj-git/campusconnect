@@ -24,6 +24,8 @@ const directMessageSchema = new mongoose.Schema({
   fileName: { type: String },
   publicId: { type: String },
   resourceType: { type: String },
+  rawPublicId: { type: String }, // PDFs: download copy (see routes/pyq.js quirk)
+  rawUrl: { type: String },
   createdAt: { type: Date, default: Date.now }
 });
 directMessageSchema.index({ conversationId: 1, createdAt: -1 });

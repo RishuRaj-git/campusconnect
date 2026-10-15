@@ -99,29 +99,57 @@ router.post('/upload', authMiddleware, actionRate('upload'), upload.single('file
     const match = await Teacher.findOne({ name: new RegExp(`^${escapeRegExp(toStr(teacherName, 100))}$`, 'i') }).select('_id');
     if (match) teacher = match._id; // links only to existing teachers — add new ones from the Teachers page
   }
-  let fileUrl, fileName, publicId, resourceType;
+  let fileUrl, fileName, publicId, resourceType, rawPublicId, rawUrl, pageCount = 1;
   if (req.file) {
     if (!storageEnabled()) return res.status(500).json({ error: 'File storage is not configured.' });
     try {
       const isPdf = path.extname(req.file.originalname).toLowerCase() === '.pdf';
-      const up = await uploadBuffer(req.file.buffer, { filename: req.file.originalname, resourceType: isPdf ? 'raw' : 'auto' });
-      fileUrl = up.url; publicId = up.publicId; resourceType = up.resourceType; fileName = req.file.originalname;
+      if (isPdf) {
+        // Dual-store: image copy renders pages (f_jpg,pg_N works), raw copy
+        // downloads bytes (this account 401s `.pdf`-suffixed delivery).
+        const [img, raw] = await Promise.all([
+          uploadBuffer(req.file.buffer, { filename: req.file.originalname, resourceType: 'auto' }),
+          uploadBuffer(req.file.buffer, { filename: req.file.originalname, resourceType: 'raw' })
+        ]);
+        fileUrl = img.url; publicId = img.publicId; resourceType = 'image';
+        rawPublicId = raw.publicId; rawUrl = raw.url;
+        pageCount = img.pages || 1;
+      } else {
+        const up = await uploadBuffer(req.file.buffer, { filename: req.file.originalname, resourceType: 'auto' });
+        fileUrl = up.url; publicId = up.publicId; resourceType = up.resourceType; fileName = req.file.originalname;
+      }
+      fileName = req.file.originalname;
     } catch (e) {
       console.error('Cloudinary upload failed:', e.message);
       return res.status(500).json({ error: 'Upload to storage failed. Try again.' });
     }
   }
   const pyq = await new PYQ({ branch, subject, year: Number(year), semester: semester || undefined, examType: examType || 'Other', title, notes, teacher,
-    fileUrl, fileName, publicId, resourceType, uploadedBy: req.user.id }).save();
+    fileUrl, fileName, publicId, resourceType, rawPublicId, rawUrl, pageCount, uploadedBy: req.user.id }).save();
   res.status(201).json(pyq);
 });
 // GET /api/pyq/:id/download — LOGIN REQUIRED. Counts the download, then
 // hands the client a URL to open (plain <a> links can't carry a JWT, so the
 // frontend fetches this with its token and opens the returned URL).
+// PDFs download via their raw copy (this account 401s `.pdf`-suffixed URLs).
 router.get('/:id/download', authMiddleware, async (req, res) => {
   const pyq = await PYQ.findByIdAndUpdate(req.params.id, { $inc: { downloads: 1 } }, { new: true });
   if (!pyq?.fileUrl) return res.status(404).json({ error: 'File not found.' });
-  res.json({ url: pyq.fileUrl, fileName: pyq.fileName });
+  res.json({ url: pyq.rawUrl || pyq.fileUrl, fileName: pyq.fileName });
+});
+// GET /api/pyq/:id/pages — LOGIN REQUIRED. Scribd-style page images for the
+// in-app reader: [{ n, url }]. Rendered by Cloudinary (f_jpg,pg_N), cached
+// after first view, plain <img> tags (no PDF engine, no iframe, no CSP pain).
+router.get('/:id/pages', authMiddleware, async (req, res) => {
+  const pyq = await PYQ.findById(req.params.id).select('publicId resourceType pageCount fileName');
+  if (!pyq?.publicId) return res.status(404).json({ error: 'No previewable file.' });
+  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+  const n = Math.min(Math.max(pyq.pageCount || 1, 1), 200);
+  const pages = [];
+  for (let i = 1; i <= n; i++) {
+    pages.push({ n: i, url: `https://res.cloudinary.com/${cloud}/image/upload/f_jpg,pg_${i},w_1200/${pyq.publicId}.jpg` });
+  }
+  res.json({ pages, total: n });
 });
 router.delete('/:id', authMiddleware, async (req, res) => {
   const pyq = await PYQ.findById(req.params.id);
@@ -131,6 +159,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   if (pyq.uploadedBy.toString() !== req.user.id && !me?.isAdmin) return res.status(403).json({ error: 'Not authorized.' });
   if (pyq.publicId) {
     await destroyFile(pyq.publicId, pyq.resourceType); // Cloudinary file
+    if (pyq.rawPublicId) await destroyFile(pyq.rawPublicId, 'raw'); // download copy
   } else if (pyq.fileUrl && pyq.fileUrl.startsWith('/uploads')) {
     fs.unlink(path.join(__dirname, '..', pyq.fileUrl.replace('/uploads', 'uploads')), () => {}); // legacy local file
   }

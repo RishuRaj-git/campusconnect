@@ -33,7 +33,7 @@ function uploadBuffer(buffer, { folder = 'campusconnect/pyqs', filename = 'file'
       { folder, resource_type: resourceType, public_id: publicId },
       (err, result) => {
         if (err) return reject(err);
-        resolve({ url: result.secure_url, publicId: result.public_id, resourceType: result.resource_type, ext });
+        resolve({ url: result.secure_url, publicId: result.public_id, resourceType: result.resource_type, ext, pages: result.pages });
       }
     );
     stream.end(buffer);
