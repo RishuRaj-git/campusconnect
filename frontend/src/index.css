@@ -111,12 +111,9 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
   animation: cc-sheen 1.6s ease .5s both; pointer-events: none; }
 .intro-tag { @apply text-slate-400 mt-3 text-sm sm:text-base; animation: cc-tag-in .7s ease 1.15s both; }
 
-/* Splash: hazy blurry blue, never black */
-.intro-splash { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 45%, #1e3a8a 100%); }
-.intro-splash::after { content: ''; position: absolute; inset: 0; backdrop-filter: blur(2px); background: rgba(255,255,255,.06); pointer-events: none; }
-.intro-splash .orb { opacity: .8; }
-.intro-splash .intro-eyebrow { color: #c7d2fe; }
-.intro-splash .intro-tag { color: #e0e7ff; }
+/* Splash: simple flat backdrop — no blur anywhere, crisp text only */
+.intro-eyebrow { color: #c7d2fe; }
+.intro-tag { color: #e0e7ff; }
 /* White, slightly cursive wordmark — beats the gradient so it reads on blue */
 .fluid-word.fluid-intro, .dark .fluid-word.fluid-intro {
   background: none; -webkit-background-clip: border-box; background-clip: border-box;

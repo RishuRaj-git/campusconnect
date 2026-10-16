@@ -17,13 +17,9 @@ export default function Intro({ onDone }) {
   return (
     <div
       onClick={skip}
-      className={`intro-splash fixed inset-0 z-[100] grid place-items-center transition-all duration-500 ${leaving ? 'opacity-0 -translate-y-6 pointer-events-none' : 'opacity-100'}`}
+      className={`fixed inset-0 z-[100] grid place-items-center transition-all duration-500 ${leaving ? 'opacity-0 -translate-y-6 pointer-events-none' : 'opacity-100'}`}
+      style={{ background: 'linear-gradient(160deg, #1e1b4b, #312e81)' }}
     >
-      <div aria-hidden className="absolute inset-0 overflow-hidden">
-        <div className="orb orb-a" />
-        <div className="orb orb-b" />
-        <div className="orb orb-c" />
-      </div>
       <div className="relative text-center px-6">
         <p className="intro-eyebrow">Welcome to</p>
         <h1><FluidWord size="intro" delay={0.15} /></h1>
