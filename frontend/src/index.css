@@ -114,13 +114,14 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 /* Splash: simple flat backdrop — no blur anywhere, crisp text only */
 .intro-eyebrow { color: #c7d2fe; }
 .intro-tag { color: #e0e7ff; }
-/* White, slightly cursive wordmark — beats the gradient so it reads on blue */
+/* White, slightly cursive wordmark — flat, zero glow, blends straight in */
 .fluid-word.fluid-intro, .dark .fluid-word.fluid-intro {
   background: none; -webkit-background-clip: border-box; background-clip: border-box;
   color: #fff; font-family: 'Caveat', 'Segoe Script', cursive; font-weight: 700;
   font-size: clamp(3rem, 12vw, 6rem); letter-spacing: .01em;
-  text-shadow: 0 2px 30px rgba(255,255,255,.35);
+  text-shadow: none;
 }
+.fluid-intro .intro-sheen { display: none; }
 /* Crisp letters only — blur lives in the background, never on the text */
 @keyframes cc-letter-solid { from { opacity: 0; transform: translateY(.4em) scale(.96); } to { opacity: 1; transform: none; } }
 .fluid-intro .intro-letter { animation-name: cc-letter-solid; animation-duration: .5s; }
