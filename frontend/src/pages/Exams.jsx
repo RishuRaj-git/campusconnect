@@ -77,7 +77,7 @@ export function ExamCountdown() {
 
   if (!next) {
     return (
-      <Link to="/exams" className="card lift anim-fade-up flex items-center justify-between">
+      <Link to="/exams" className="card lift reveal flex items-center justify-between">
         <div><h3 className="font-bold">📝 Exam Season</h3><p className="text-sm opacity-70">No exam dates yet — add your semester schedule.</p></div>
         <span className="btn-primary text-sm">+ Add</span>
       </Link>
@@ -88,7 +88,7 @@ export function ExamCountdown() {
   return (
     <div className="space-y-2">
       {level === 'hurry' && <HurryLine exam={next} days={days} />}
-      <div className={`card lift ${level === 'hurry' ? 'hurry border-red-500/60' : level === 'soon' ? 'border-amber-400/60' : ''}`}>
+      <div className={`card lift reveal ${level === 'hurry' ? 'hurry border-red-500/60' : level === 'soon' ? 'border-amber-400/60' : ''}`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className={`text-xs font-bold uppercase tracking-widest ${level === 'hurry' ? 'text-red-600 hurry-blink' : 'opacity-60'}`}>
@@ -141,7 +141,7 @@ export function ExamsPage() {
       {hurryOne && <HurryLine exam={hurryOne.e} days={hurryOne.days} />}
 
       {isAdmin ? (
-        <form onSubmit={add} className="card space-y-2 anim-fade-in">
+        <form onSubmit={add} className="card space-y-2 pop-in">
           <h3 className="font-bold">+ Add exam date</h3>
           <div className="grid sm:grid-cols-2 gap-2">
             <input className="input" placeholder="Title * (e.g. Maths End-Term)" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
@@ -164,7 +164,7 @@ export function ExamsPage() {
           const days = Math.ceil((new Date(e.examDate).getTime() - now) / 86400000);
           const level = days < 0 ? 'done' : urgency(days);
           return (
-            <div key={e._id} className={`card lift anim-fade-up ${level === 'hurry' ? 'hurry border-red-500/60' : ''}`} style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
+            <div key={e._id} className={`card lift reveal ${level === 'hurry' ? 'hurry border-red-500/60' : ''}`} style={{ '--d': `${Math.min(i, 8) * 50}ms` }}>
               <div className="flex flex-wrap justify-between gap-2 items-center">
                 <div>
                   <h4 className="font-bold">{level === 'hurry' ? '🔥 ' : ''}{e.title} <span className="text-xs font-normal opacity-60">{e.examType}</span></h4>

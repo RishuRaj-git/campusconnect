@@ -8,6 +8,7 @@ import { Chat, DMs, PYQ, Profile, Admin } from './pages/Features';
 import { Teachers, TeacherDetail } from './pages/Teachers';
 import { ExamsPage } from './pages/Exams';
 import { PrivacyPolicy, CONTACT_EMAIL, MAKER } from './pages/Legal';
+import useReveal from './hooks/useReveal';
 
 function AnimatedRoutes() {
   const loc = useLocation();
@@ -37,6 +38,7 @@ function AnimatedRoutes() {
 
 export default function App() {
   const [intro, setIntro] = useState(true);
+  useReveal();
   return (
     <AuthProvider>
       <BrowserRouter>
@@ -50,7 +52,7 @@ export default function App() {
         <AnimatedRoutes />
         <footer className="text-center text-xs opacity-80 pb-28 md:pb-8 space-y-1">
           <p>CampusConnect © 2026 — Where your campus talks.</p>
-          <p>Made with ❤️ by <b>{MAKER}</b> • <a className="text-brand-600 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> • <Link className="text-brand-600 hover:underline" to="/privacy">Privacy Policy</Link></p>
+          <p>Made with ❤️ by <b>{MAKER}</b> • <a className="text-brand-600 link-anim" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> • <Link className="text-brand-600 link-anim" to="/privacy">Privacy Policy</Link></p>
         </footer>
       </BrowserRouter>
     </AuthProvider>

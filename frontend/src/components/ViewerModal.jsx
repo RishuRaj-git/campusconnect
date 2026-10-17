@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export const fileKind = (name = '') => {
   const ext = name.split('.').pop()?.toLowerCase() || '';
@@ -11,23 +11,30 @@ export const fileKind = (name = '') => {
 // (correct inline Content-Type, same origin → zero CORS/CSP/worker issues).
 // { file: { url, name }, onSave (optional download fn), onClose }
 export default function ViewerModal({ file, onSave, onClose }) {
+  const [closing, setClosing] = useState(false);
+  const close = () => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(onClose, 170); // let pop-out finish
+  };
   useEffect(() => {
-    const esc = (e) => e.key === 'Escape' && onClose();
+    const esc = (e) => e.key === 'Escape' && close();
     window.addEventListener('keydown', esc);
     document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', esc); document.body.style.overflow = ''; };
-  }, [onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closing]);
 
   if (!file) return null;
   const kind = fileKind(file.name);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm anim-fade-in" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[92vh] flex flex-col card !p-3 sm:!p-4 anim-pop">
+      <div className={`absolute inset-0 bg-slate-950/80 backdrop-blur-sm ${closing ? 'anim-fade-out' : 'anim-fade-in'}`} onClick={close} />
+      <div className={`relative w-full max-w-2xl max-h-[92vh] flex flex-col card !p-3 sm:!p-4 ${closing ? 'pop-out' : 'pop-in'}`}>
         <div className="flex items-center gap-2 mb-2">
           <h3 className="font-bold text-sm truncate flex-1">👁 {file.name}</h3>
           {onSave && <button className="btn-primary text-xs !py-1 shrink-0" onClick={onSave}>⬇ Save</button>}
-          <button className="btn-ghost text-xs !py-1 shrink-0" onClick={onClose}>✕</button>
+          <button className="btn-ghost text-xs !py-1 shrink-0" onClick={close}>✕</button>
         </div>
         <div className="overflow-auto rounded-xl bg-slate-100 dark:bg-slate-950 min-h-[50vh] max-h-[75vh]">
           {kind === 'image' && (

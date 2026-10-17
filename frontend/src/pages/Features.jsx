@@ -15,9 +15,9 @@ function Bubble({ mine, time, name, nameHref, children }) {
   const [show, setShow] = useState(false);
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-      <div className={`flex flex-col max-w-[82%] sm:max-w-[70%] ${mine ? 'items-end' : 'items-start'}`}>
+      <div className={`flex flex-col max-w-[82%] sm:max-w-[70%] bubble-in ${mine ? 'items-end' : 'items-start'}`}>
         {name && (
-          <Link to={nameHref} className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:underline mb-0.5 ml-1">{name}</Link>
+          <Link to={nameHref} className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 link-anim mb-0.5 ml-1">{name}</Link>
         )}
         <button
           onClick={() => setShow(!show)}
@@ -184,20 +184,20 @@ export function DMs() {
     <div className="grid md:grid-cols-3 gap-3">
       <div className="card !p-3 max-h-[32vh] md:max-h-none overflow-y-auto">
         <div className="flex gap-2 mb-2"><input className="input" placeholder="username..." value={find} onChange={e => setFind(e.target.value)} onKeyDown={e => e.key === 'Enter' && start()} /><button className="btn-primary shrink-0" onClick={() => start()}>+</button></div>
-        {convos.map(c => (
-          <div key={c._id} className={`flex items-center gap-2 p-2 rounded-xl ${active?._id === c._id ? 'bg-slate-100 dark:bg-slate-800' : ''}`}>
+        {convos.map((c, i) => (
+          <div key={c._id} className={`row-hover anim-fade-up flex items-center gap-2 p-2 ${active?._id === c._id ? 'bg-slate-100 dark:bg-slate-800' : ''}`} style={{ '--d': `${Math.min(i, 8) * 40}ms` }}>
             <button onClick={() => open(c)} className="flex-1 text-left min-w-0">
               <span className="block font-bold text-sm truncate">{c.otherUser?.username}</span>
               <span className="block text-xs opacity-60 truncate">{c.lastMessage}</span>
             </button>
-            <Link to={`/profile/${c.otherUser?.username}`} className="text-xs text-brand-600 shrink-0 px-1">View ›</Link>
+            <Link to={`/profile/${c.otherUser?.username}`} className="text-xs text-brand-600 link-anim shrink-0 px-1">View ›</Link>
           </div>
         ))}
         {convos.length === 0 && <p className="text-sm opacity-60">No chats yet — search a username above. 🔍</p>}
       </div>
       <div className="card !p-3 sm:!p-5 md:col-span-2">
         {!active ? <p className="opacity-60">Pick a conversation. 💬</p> : (<>
-          <h3 className="font-bold mb-2">Chat with <Link to={`/profile/${active.otherUser?.username}`} className="text-brand-600 hover:underline">{active.otherUser?.username}</Link></h3>
+          <h3 className="font-bold mb-2">Chat with <Link to={`/profile/${active.otherUser?.username}`} className="text-brand-600 link-anim">{active.otherUser?.username}</Link></h3>
           <div ref={logRef} className="h-[50vh] sm:h-72 overflow-y-auto rounded-xl p-2 bg-slate-50 dark:bg-slate-950">
             {msgs.map((m, i) => {
               const mine = m.sender === user;
@@ -319,7 +319,7 @@ export function PYQ() {
         <button className="btn-primary" onClick={() => load(true)}>Filter</button>
       </div>
       {user && (
-        <form onSubmit={upload} className="card space-y-2">
+        <form onSubmit={upload} className="card space-y-2 pop-in">
           <h3 className="font-bold">Upload PYQ</h3>
           <div className="grid sm:grid-cols-2 gap-2">
             <input className="input" placeholder="Branch (e.g. CSE)" value={form.branch} onChange={e => setForm({ ...form, branch: e.target.value })} required />
@@ -340,7 +340,7 @@ export function PYQ() {
       )}
       <div className="grid sm:grid-cols-2 gap-3">
         {items.map((p, i) => (
-          <div key={p._id} className="card lift anim-fade-up" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
+          <div key={p._id} className="card lift reveal" style={{ '--d': `${Math.min(i, 8) * 50}ms` }}>
             <h4 className="font-bold">{p.title}</h4>
             <p className="text-xs opacity-60 mt-0.5">{p.branch} • {p.subject} • {p.year}{p.semester ? ` • Sem ${p.semester}` : ''}{p.examType && p.examType !== 'Other' ? ` • ${p.examType}` : ''} • ⬇ {p.downloads} • by {p.uploadedBy?.username || 'unknown'}</p>
             {p.teacher && <p className="text-xs mt-0.5">👩‍🏫 <Link to={`/teachers/${p.teacher._id}`} className="text-brand-600">{p.teacher.name}</Link></p>}
@@ -355,11 +355,11 @@ export function PYQ() {
               {(isAdmin || p.uploadedBy?.username === user) && <button className="btn-ghost text-sm !py-1 text-red-600" onClick={() => remove(p._id)}>Delete</button>}
             </div>
             {expandedId === p._id && viewUrls[p._id] && (
-              <div className="mt-3 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 anim-fade-in">
+              <div className="mt-3 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 pop-in">
                 {fileKind(p.fileName) === 'pdf' ? (
                   <>
                     <iframe src={viewUrls[p._id]} title={p.fileName} className="w-full h-[70vh] bg-white" />
-                    <a href={viewUrls[p._id]} target="_blank" rel="noopener" className="block text-center text-xs text-brand-600 font-semibold py-1.5 bg-slate-50 dark:bg-slate-950 hover:underline">
+                    <a href={viewUrls[p._id]} target="_blank" rel="noopener" className="block text-center text-xs text-brand-600 font-semibold py-1.5 bg-slate-50 dark:bg-slate-950 link-anim">
                       Trouble reading here? Open full screen ⤢
                     </a>
                   </>
@@ -410,7 +410,7 @@ export function Profile() {
     finally { setUploading(false); e.target.value = ''; }
   };
   return (
-    <div className="card space-y-2 max-w-lg">
+    <div className="card pop-in space-y-2 max-w-lg">
       <div className="flex items-center gap-3">
         {!imgDead && p?.avatarUrl
           ? <img src={p.avatarUrl} alt="avatar" onError={() => setImgDead(true)} className="w-16 h-16 rounded-full object-cover border-2 border-brand-500/40 anim-pop" />
@@ -498,16 +498,16 @@ export function Admin() {
     <div className="space-y-3">
       <h2 className="font-display font-bold text-2xl">🛡️ Admin Suite</h2>
       {stats
-        ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Object.entries(stats).map(([k, v], i) => <div key={k} className="card lift text-center anim-fade-up" style={{ animationDelay: `${i * 60}ms` }}><p className="text-2xl font-bold">{v}</p><p className="text-xs opacity-60">{k}</p></div>)}</div>
+        ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Object.entries(stats).map(([k, v], i) => <div key={k} className="card lift reveal text-center" style={{ '--d': `${i * 60}ms` }}><p className="text-2xl font-bold">{v}</p><p className="text-xs opacity-60">{k}</p></div>)}</div>
         : <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{[0, 1, 2, 3].map(i => <div key={i} className="skeleton h-20" />)}</div>}
 
       <div className="flex flex-wrap gap-2">{['users', 'posts', 'chat', 'pyqs', 'teachers'].map((id) => tabBtn(id, { users: `Users (${users.length})`, posts: `Posts (${posts.length})`, chat: `Chat (${chats.length})`, pyqs: `PYQs (${pyqs.length})`, teachers: `Teachers (${flagged.length} flagged)` }[id]))}</div>
 
       {tab === 'users' && (
-        <div className="card anim-fade-in">
+        <div className="card anim-pop-in">
           <input className="input mb-2" placeholder="Search users…" value={q} onChange={e => setQ(e.target.value)} />
           {shownUsers.map(u => (
-            <div key={u._id} className="flex items-center justify-between py-1.5 text-sm border-b border-slate-100 dark:border-slate-800 last:border-0">
+            <div key={u._id} className="row-hover flex items-center justify-between py-1.5 px-1 text-sm border-b border-slate-100 dark:border-slate-800 last:border-0">
               <span><b>{u.username}</b> <span className="opacity-60">{u.branch || ''}</span> {u.isAdmin && '⭐'} {u.isBanned && '⛔'}</span>
               {!u.isAdmin && <button className="btn-ghost !py-1 text-xs" onClick={() => toggleBan(u)}>{u.isBanned ? 'Unban' : 'Ban'}</button>}
             </div>
@@ -517,9 +517,9 @@ export function Admin() {
       )}
 
       {tab === 'posts' && (
-        <div className="space-y-2">
-          {posts.map(p => (
-            <div key={p._id} className="card anim-fade-in">
+        <div className="space-y-2 anim-pop-in">
+          {posts.map((p, i) => (
+            <div key={p._id} className="card lift reveal" style={{ '--d': `${Math.min(i, 8) * 40}ms` }}>
               <div className="flex justify-between gap-2">
                 <div><h4 className="font-bold text-sm">{p.title}</h4><p className="text-xs opacity-60">by {p.author} • {p.likes?.length || 0} likes • {p.comments?.length || 0} comments</p></div>
                 <button className="btn-ghost !py-1 text-xs text-red-600 shrink-0" onClick={() => delPost(p._id)}>Delete</button>
@@ -531,9 +531,9 @@ export function Admin() {
       )}
 
       {tab === 'chat' && (
-        <div className="card anim-fade-in space-y-1">
+        <div className="card anim-pop-in space-y-1">
           {chats.map(c => (
-            <div key={c._id} className="flex justify-between gap-2 text-sm py-1 border-b border-slate-100 dark:border-slate-800 last:border-0">
+            <div key={c._id} className="row-hover flex justify-between gap-2 text-sm py-1 px-1 border-b border-slate-100 dark:border-slate-800 last:border-0">
               <p className="truncate"><b>{c.username}:</b> {c.message}</p>
               <button className="text-red-600 text-xs shrink-0" onClick={() => delChat(c._id)}>Delete</button>
             </div>
@@ -543,9 +543,9 @@ export function Admin() {
       )}
 
       {tab === 'pyqs' && (
-        <div className="space-y-2">
-          {pyqs.map(p => (
-            <div key={p._id} className="card anim-fade-in">
+        <div className="space-y-2 anim-pop-in">
+          {pyqs.map((p, i) => (
+            <div key={p._id} className="card lift reveal" style={{ '--d': `${Math.min(i, 8) * 40}ms` }}>
               <div className="flex justify-between gap-2">
                 <div><h4 className="font-bold text-sm">{p.title}</h4><p className="text-xs opacity-60">{p.branch} • {p.subject} • {p.year} • ⬇ {p.downloads}</p></div>
                 <button className="btn-ghost !py-1 text-xs text-red-600 shrink-0" onClick={() => delPyq(p._id)}>Delete</button>
@@ -557,21 +557,21 @@ export function Admin() {
       )}
 
       {tab === 'teachers' && (
-        <div className="space-y-2">
-          <div className="card anim-fade-in">
+        <div className="space-y-2 anim-pop-in">
+          <div className="card">
             <h3 className="font-bold mb-2">🚩 Hidden reviews ({flagged.length})</h3>
             {flagged.map(r => (
-              <div key={r._id} className="flex justify-between gap-2 text-sm py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+              <div key={r._id} className="row-hover flex justify-between gap-2 text-sm py-1.5 px-1 border-b border-slate-100 dark:border-slate-800 last:border-0">
                 <p className="truncate"><b>{r.teacher?.name}</b> by <b>{r.rater?.username}</b>: {r.comment || `(${r.teaching}/${r.grading}/${r.attendance}/${r.pyqRep})`}</p>
                 <button className="text-brand-600 text-xs shrink-0" onClick={() => unhideReview(r._id)}>Unhide</button>
               </div>
             ))}
             {flagged.length === 0 && <p className="text-sm opacity-60">Queue clear. 🎉</p>}
           </div>
-          <div className="card anim-fade-in">
+          <div className="card">
             <h3 className="font-bold mb-2">👩‍🏫 All teachers ({teachersAdmin.length})</h3>
             {teachersAdmin.map(t => (
-              <div key={t._id} className="flex justify-between gap-2 text-sm py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+              <div key={t._id} className="row-hover flex justify-between gap-2 text-sm py-1.5 px-1 border-b border-slate-100 dark:border-slate-800 last:border-0">
                 <span><b>{t.name}</b> <span className="opacity-60">{t.department} • {t.ratingCount} ratings</span></span>
                 <button className="text-red-600 text-xs shrink-0" onClick={() => delTeacher(t._id)}>Remove</button>
               </div>

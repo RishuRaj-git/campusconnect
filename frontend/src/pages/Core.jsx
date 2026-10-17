@@ -31,15 +31,15 @@ export function AuthPage() {
       <h1 className="font-display text-2xl font-bold mb-1">Welcome to CampusConnect</h1>
       <p className="text-sm opacity-70 mb-4">Where your campus talks.</p>
       <div className="flex gap-2 mb-4">
-        <button onClick={() => setMode('login')} className={mode === 'login' ? 'btn-primary' : 'btn-ghost'}>Login</button>
-        <button onClick={() => setMode('signup')} className={mode === 'signup' ? 'btn-primary' : 'btn-ghost'}>Signup</button>
+        <button onClick={() => setMode('login')} className={`${mode === 'login' ? 'btn-primary' : 'btn-ghost'} active:scale-95 transition-all duration-150`}>Login</button>
+        <button onClick={() => setMode('signup')} className={`${mode === 'signup' ? 'btn-primary' : 'btn-ghost'} active:scale-95 transition-all duration-150`}>Signup</button>
       </div>
-      <form onSubmit={submit} className="space-y-3">
+      <form key={mode} onSubmit={submit} className="space-y-3 anim-pop-in">
         <input className="input" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required />
         <input className="input" type="password" placeholder="Password (6+ chars)" value={password} onChange={e => setPassword(e.target.value)} required />
         <button className="btn-primary w-full">{mode === 'login' ? 'Log in' : 'Sign up'}</button>
       </form>
-      {msg && <p className="mt-3 text-sm">{msg}</p>}
+      {msg && <p key={msg} className="mt-3 text-sm nudge">{msg}</p>}
     </div>
   );
 }
@@ -60,7 +60,7 @@ export function Home() {
       <ExamCountdown />
       <div className="grid sm:grid-cols-2 gap-3">
         {[['/chat', '💬 Live Chat', 'Group room, online now'], ['/discussions', '❓ Campus Queries', 'Ask, answer, upvote'], ['/pyq', '📚 PYQ Bank', 'Papers by branch/year'], ['/teachers', '👩‍🏫 Teachers', 'Ratings + teacher notes'], ['/exams', '⏳ Exams', 'Countdowns + hurry mode'], ['/dms', '✉️ DMs', '1-on-1 messages']].map(([to, t, d], i) => (
-          <Link key={to} to={to} className="card lift anim-fade-up" style={{ animationDelay: `${Math.min(i, 6) * 60}ms` }}><h3 className="font-bold">{t}</h3><p className="text-sm opacity-70">{d}</p></Link>
+          <Link key={to} to={to} className="card lift reveal" style={{ '--d': `${Math.min(i, 6) * 60}ms` }}><h3 className="font-bold">{t}</h3><p className="text-sm opacity-70">{d}</p></Link>
         ))}
       </div>
     </div>
@@ -74,7 +74,7 @@ function Answer({ qid, a, user, onLike }) {
   return (
     <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
       <div className="flex items-center gap-2 text-xs mb-1">
-        <Link to={`/profile/${a.author}`} className="font-bold text-brand-600 hover:underline">{a.author}</Link>
+        <Link to={`/profile/${a.author}`} className="font-bold text-brand-600 link-anim">{a.author}</Link>
         {a.createdAt && <span className="opacity-50">{new Date(a.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>}
       </div>
       <p className="text-sm whitespace-pre-wrap">{a.text.length > 300 && !open ? a.text.slice(0, 300) + '…' : a.text}</p>
@@ -159,11 +159,11 @@ export function Discussions() {
         const shown = isOpen ? answers : answers.slice(0, 2);
         const n = p.comments?.length || 0;
         return (
-          <div key={p._id} className="card lift anim-fade-up" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
+          <div key={p._id} className="card lift reveal" style={{ '--d': `${Math.min(i, 8) * 50}ms` }}>
             <h3 className="font-display font-bold text-lg leading-snug">{p.title}</h3>
             {p.content && <p className="text-sm mt-1 opacity-80">{p.content}</p>}
             <p className="text-xs opacity-60 mt-1.5">
-              Asked by <Link to={`/profile/${p.author}`} className="text-brand-600 hover:underline font-semibold">{p.author}</Link>
+              Asked by <Link to={`/profile/${p.author}`} className="text-brand-600 link-anim font-semibold">{p.author}</Link>
               {' '}• <span key={p.likes?.length || 0} className="anim-pop inline-block">👍 {p.likes?.length || 0}</span>
               {' '}• 💬 {n} answer{n === 1 ? '' : 's'}
             </p>
@@ -176,7 +176,7 @@ export function Discussions() {
               )}
             </div>
             {shown.length > 0 && (
-              <div className="mt-3 space-y-2">
+              <div key={String(isOpen)} className="mt-3 space-y-2 anim-fade-up">
                 {shown.map(a => <Answer key={a._id} qid={p._id} a={a} user={user} onLike={likeA} />)}
               </div>
             )}

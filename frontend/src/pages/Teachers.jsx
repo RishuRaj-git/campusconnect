@@ -69,7 +69,7 @@ export function Teachers() {
       </div>
 
       {showAdd && (
-        <form onSubmit={add} className="card space-y-2 anim-fade-in">
+        <form onSubmit={add} className="card space-y-2 pop-in">
           <h3 className="font-bold">Add a teacher</h3>
           <div className="grid sm:grid-cols-2 gap-2">
             <input className="input" placeholder="Full name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
@@ -82,7 +82,7 @@ export function Teachers() {
 
       <div className="grid sm:grid-cols-2 gap-3">
         {items.map((t, i) => (
-          <Link key={t._id} to={`/teachers/${t._id}`} className="card lift anim-fade-up" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
+          <Link key={t._id} to={`/teachers/${t._id}`} className="card lift reveal" style={{ '--d': `${Math.min(i, 8) * 50}ms` }}>
             <h3 className="font-bold">👩‍🏫 {t.name}</h3>
             <p className="text-xs opacity-60 mt-0.5">{t.department || '—'}{t.subjects?.length ? ` • ${t.subjects.slice(0, 3).join(', ')}` : ''}</p>
             <p className="text-sm mt-1"><Stars value={t.avgOverall} /> <span className="opacity-60">({t.ratingCount} ratings)</span></p>
@@ -120,7 +120,7 @@ export function TeacherDetail() {
 
   return (
     <div className="space-y-3">
-      <div className="card">
+      <div className="card reveal">
         <h2 className="font-display font-bold text-2xl">👩‍🏫 {t.name}</h2>
         <p className="text-sm opacity-60">{t.department || '—'}{t.subjects?.length ? ` • ${t.subjects.join(', ')}` : ''}</p>
         <div className="mt-3 space-y-1.5">
@@ -141,7 +141,7 @@ export function TeacherDetail() {
       </div>
 
       {user && (
-        <form onSubmit={rate} className="card space-y-2">
+        <form onSubmit={rate} className="card space-y-2 reveal" style={{ '--d': '60ms' }}>
           <h3 className="font-bold">Rate {t.name.split(' ')[0]} — be fair, rate the teaching 🤝</h3>
           <div className="grid sm:grid-cols-2 gap-2">
             {DIMS.map(([k, label]) => (
@@ -157,7 +157,7 @@ export function TeacherDetail() {
         </form>
       )}
 
-      <div className="card">
+      <div className="card reveal" style={{ '--d': '120ms' }}>
         <h3 className="font-bold mb-2">💬 Student reviews ({reviews.length})</h3>
         <div className="space-y-2">
           {reviews.map(r => (
@@ -170,11 +170,11 @@ export function TeacherDetail() {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card reveal" style={{ '--d': '180ms' }}>
         <h3 className="font-bold mb-2">📚 Notes by {t.name.split(' ')[0]} ({notes.length})</h3>
         <div className="grid sm:grid-cols-2 gap-2">
           {notes.map(n => (
-            <div key={n._id} className="border border-slate-200 dark:border-slate-800 rounded-xl p-3">
+            <div key={n._id} className="lift border border-slate-200 dark:border-slate-800 rounded-xl p-3">
               <p className="font-bold text-sm">{n.title}</p>
               <p className="text-xs opacity-60">{n.branch} • {n.subject} • {n.year}</p>
               {n.fileUrl && <button className="text-brand-600 text-sm" onClick={() => downloadPyq(n._id).catch(() => alert('Login required to download'))}>Download →</button>}

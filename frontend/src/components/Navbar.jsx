@@ -49,7 +49,7 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-20 px-3 pt-3">
       <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
-        <Link to="/" className="font-display font-bold text-xl tracking-tight shrink-0">
+        <Link to="/" className="brand-mark font-display font-bold text-xl tracking-tight shrink-0">
           🟣 Campus<span className="text-brand-600 dark:text-accent-400">Connect</span>
         </Link>
         {/* Desktop: floating Apple-style pill */}

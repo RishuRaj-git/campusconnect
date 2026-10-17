@@ -7,7 +7,7 @@ export const MAKER = 'Rishu Raj';
 export function PrivacyPolicy() {
   usePageMeta({ title: 'Privacy Policy', description: 'CampusConnect privacy policy: what data we collect and how it is used.' });
   return (
-    <div className="card max-w-2xl mx-auto space-y-4 anim-fade-up">
+    <div className="card max-w-2xl mx-auto space-y-4 reveal">
       <h1 className="font-display font-bold text-2xl">Privacy Policy</h1>
       <p className="text-sm opacity-70">Last updated: October 2026 • CampusConnect (“we”, “our”) by {MAKER}</p>
 
@@ -38,7 +38,7 @@ export function PrivacyPolicy() {
 
       <section className="space-y-1 text-sm">
         <h2 className="font-bold">6. Contact</h2>
-        <p>Questions, deletions, or abuse reports: <a className="text-brand-600 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></p>
+        <p>Questions, deletions, or abuse reports: <a className="text-brand-600 link-anim" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></p>
       </section>
 
       <Link to="/" className="btn-ghost text-sm inline-block">← Back home</Link>

@@ -5,13 +5,24 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .card { @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-sm border border-slate-200/70 dark:border-slate-800 p-5; }
 .btn-primary { @apply bg-brand-600 hover:bg-brand-500 active:scale-95 text-white font-semibold rounded-xl px-4 py-2 transition-all duration-150; }
 .btn-ghost { @apply border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all duration-150; }
-.input { @apply w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-base sm:text-sm outline-none focus:ring-2 focus:ring-brand-500 transition; }
-/* 16px inputs stop iOS auto-zoom on focus */
+.input { @apply w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-base sm:text-sm outline-none transition; }
+/* Soft halo replaces the hard ring — same indigo, calmer focus. 16px text stops iOS zoom. */
+.input:focus { box-shadow: 0 0 0 4px rgba(79,70,229,.14); border-color: #6366f1; }
+.dark .input:focus { box-shadow: 0 0 0 4px rgba(163,230,53,.1); border-color: #a3e635; }
+
+/* ---------- Motion tokens — one matrix for the whole UI ---------- */
+:root {
+  --e: cubic-bezier(.22,.8,.3,1);        /* glide — entrances, hovers, slides */
+  --e-spring: cubic-bezier(.34,1.56,.64,1); /* bouncy — pops, toggles, taps */
+}
 
 /* ---------- CampusConnect motion system (CSS-only, no deps) ---------- */
 @keyframes cc-fade-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @keyframes cc-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cc-fade-out { to { opacity: 0; } }
 @keyframes cc-pop { 0% { transform: scale(.92); } 55% { transform: scale(1.04); } 100% { transform: scale(1); } }
+@keyframes cc-pop-in { 0% { opacity: 0; transform: scale(.92) translateY(10px); } 60% { transform: scale(1.02) translateY(0); } 100% { opacity: 1; transform: none; } }
+@keyframes cc-pop-out { to { opacity: 0; transform: scale(.94) translateY(6px); } }
 @keyframes cc-slide-in { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
 @keyframes cc-spin-once { from { transform: rotate(-120deg) scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes cc-shimmer { from { background-position: -400px 0; } to { background-position: 400px 0; } }
@@ -23,12 +34,24 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 @keyframes cc-pointer-blink { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.78); } }
 @keyframes cc-trail { 0%,100% { opacity: .9; width: 2.4rem; } 50% { opacity: .25; width: 1.1rem; } }
 @keyframes cc-ring { 0% { transform: scale(.6); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+@keyframes cc-nudge { 0%,100% { transform: none; } 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+@keyframes cc-bounce { 0% { transform: scale(.7); } 55% { transform: scale(1.2); } 100% { transform: scale(1); } }
+@keyframes cc-page-in { from { opacity: 0; transform: translateY(10px) scale(.99); } to { opacity: 1; transform: none; } }
+@keyframes cc-bubble-in { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: none; } }
 
-.page-enter { animation: cc-fade-up .35s cubic-bezier(.22,.8,.3,1) both; }
-.anim-fade-up { animation: cc-fade-up .45s cubic-bezier(.22,.8,.3,1) both; }
-.anim-fade-in { animation: cc-fade-in .3s ease both; }
-.anim-slide-in { animation: cc-slide-in .3s cubic-bezier(.22,.8,.3,1) both; }
+.page-enter { animation: cc-page-in .4s var(--e) both; }
+/* --d is the universal stagger token: set `style={{ '--d': '60ms' }}` on any
+   anim-* element (plays after the delay) or any .reveal element (transition delay). */
+.anim-fade-up { animation: cc-fade-up .45s var(--e) both; animation-delay: var(--d, 0ms); }
+.anim-fade-in { animation: cc-fade-in .3s ease both; animation-delay: var(--d, 0ms); }
+.anim-fade-out { animation: cc-fade-out .17s ease-in both; }
+.anim-slide-in { animation: cc-slide-in .3s var(--e) both; animation-delay: var(--d, 0ms); }
 .anim-pop { animation: cc-pop .25s ease both; }
+.anim-pop-in { animation: cc-pop-in .3s var(--e-spring) both; animation-delay: var(--d, 0ms); }
+.pop-in { animation: cc-pop-in .35s var(--e-spring) both; animation-delay: var(--d, 0ms); }
+.pop-out { animation: cc-pop-out .17s ease-in both; }
+.bubble-in { animation: cc-bubble-in .25s var(--e-spring) both; animation-delay: var(--d, 0ms); }
+.nudge { display: inline-block; animation: cc-nudge .4s ease; }
 .theme-icon { animation: cc-spin-once .35s ease both; display: inline-block; }
 
 .skeleton { @apply rounded-xl bg-slate-200 dark:bg-slate-800; background-image: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); background-size: 400px 100%; animation: cc-shimmer 1.4s infinite linear; }
@@ -41,13 +64,44 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .dark .orb-a { background: rgba(99,102,241,.22); }
 .dark .orb-b { background: rgba(163,230,53,.12); }
 
-/* ---------- Hover physics ---------- */
-.lift { transition: transform .22s cubic-bezier(.22,.8,.3,1), box-shadow .25s ease, border-color .25s ease; }
+/* ---------- Hover physics & micro-interactions ---------- */
+.lift { transition: transform .22s var(--e), box-shadow .25s ease, border-color .25s ease; }
 .lift:hover { transform: translateY(-3px); box-shadow: 0 14px 32px -14px rgba(79,70,229,.4); @apply border-brand-500/40 dark:border-accent-400/30; }
 .btn-primary { position: relative; overflow: hidden; }
 .btn-primary::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.45) 50%, transparent 60%); transform: translateX(-110%); transition: transform .6s ease; }
+/* hover lift via `translate` so it never fights Tailwind's active:scale on `transform` */
+.btn-primary:hover { translate: 0 -1px; box-shadow: 0 10px 22px -10px rgba(79,70,229,.75); }
 .btn-primary:hover::after { transform: translateX(110%); }
+.btn-primary:active { translate: 0 0; }
+.btn-ghost:hover { translate: 0 -1px; border-color: rgba(99,102,241,.5); }
+.dark .btn-ghost:hover { border-color: rgba(163,230,53,.4); }
 .nav-link:hover { box-shadow: 0 4px 14px -6px rgba(79,70,229,.5); }
+.nav-link svg { transition: transform .25s var(--e-spring); }
+.nav-link:hover svg { transform: scale(1.15) rotate(-6deg); }
+.brand-mark { display: inline-block; transition: transform .3s var(--e-spring); }
+.brand-mark:hover { transform: scale(1.05) rotate(-2deg); }
+
+/* ---------- Scroll reveal: .reveal → observed by useReveal() → .in ----------
+   Uses the independent `translate` property so it coexists with .lift's
+   transform-based hover. The merged transition keeps hover timing intact. */
+.reveal { opacity: 0; translate: 0 16px;
+  transition: opacity .5s var(--e) var(--d, 0ms), translate .5s var(--e) var(--d, 0ms),
+              transform .22s var(--e), box-shadow .25s ease, border-color .25s ease; }
+.reveal.in { opacity: 1; translate: 0 0; }
+
+/* ---------- Text links: sliding underline ---------- */
+.link-anim { background-image: linear-gradient(currentColor, currentColor); background-size: 0% 1.5px; background-position: 0 100%; background-repeat: no-repeat; transition: background-size .3s var(--e); }
+.link-anim:hover { background-size: 100% 1.5px; }
+
+/* ---------- List rows: slide-tint on hover (DMs, admin tables) ---------- */
+.row-hover { border-radius: .75rem; transition: background .2s ease, translate .2s var(--e); }
+.row-hover:hover { background: rgba(79,70,229,.06); translate: 3px 0; }
+.dark .row-hover:hover { background: rgba(163,230,53,.07); }
+
+/* ---------- Checkbox micro-press ---------- */
+input[type="checkbox"] { accent-color: #4f46e5; transition: transform .15s var(--e-spring); cursor: pointer; }
+input[type="checkbox"]:active { transform: scale(.8); }
+.dark input[type="checkbox"] { accent-color: #a3e635; }
 
 /* ---------- Sliding theme toggle with micro-animations ---------- */
 .toggle { position: relative; width: 4.25rem; height: 2.25rem; border-radius: 9999px; flex-shrink: 0;
@@ -59,7 +113,7 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .toggle-dark:hover { box-shadow: 0 6px 22px -6px rgba(139,92,246,.8), 0 0 14px rgba(139,92,246,.35); }
 .toggle-thumb { position: absolute; top: .22rem; left: .25rem; width: 1.75rem; height: 1.75rem; border-radius: 9999px;
   background: radial-gradient(circle at 35% 35%, #fff, #fde68a); display: grid; place-items: center; font-size: .95rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,.3); transition: transform .42s cubic-bezier(.34,1.56,.64,1), background .35s ease; z-index: 1; }
+  box-shadow: 0 2px 8px rgba(0,0,0,.3); transition: transform .42s var(--e-spring), background .35s ease; z-index: 1; }
 .toggle-dark .toggle-thumb { transform: translateX(1.95rem); background: radial-gradient(circle at 35% 35%, #fff, #cbd5e1); }
 .toggle-thumb span { display: inline-block; animation: cc-spin-once .4s ease both; }
 .toggle-star { position: absolute; color: #fef9c3; animation: cc-twinkle 2.2s ease-in-out infinite; pointer-events: none; }
@@ -95,7 +149,8 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .tabbar-inner::-webkit-scrollbar { display: none; }
 .tab-item { @apply flex flex-col items-center gap-0.5 py-1 px-3 min-w-[3.5rem] shrink-0 text-[10px] font-medium text-slate-500 dark:text-slate-400 active:scale-90 transition-all duration-150; }
 .tab-item.active { @apply text-brand-600 dark:text-accent-400; }
-.tab-item svg { @apply w-6 h-6; }
+.tab-item svg { @apply w-6 h-6; transition: transform .25s var(--e-spring); }
+.tab-item.active svg { animation: cc-bounce .35s var(--e-spring); }
 .tab-dot { @apply w-1 h-1 rounded-full bg-brand-600 dark:bg-accent-400 mt-0.5; }
 
 /* ---------- Apple-style opening wordmark ---------- */
@@ -106,7 +161,7 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .intro-word { position: relative; display: inline-block; overflow: hidden; font-family: 'Space Grotesk', sans-serif; font-weight: 700;
   font-size: clamp(2.4rem, 9vw, 4.5rem); letter-spacing: -0.02em; line-height: 1.1;
   background: linear-gradient(100deg, #a5b4fc, #fff 45%, #a3e635 70%, #a5b4fc); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.intro-letter { display: inline-block; opacity: 0; animation: cc-letter-in .55s cubic-bezier(.22,.8,.3,1) forwards; }
+.intro-letter { display: inline-block; opacity: 0; animation: cc-letter-in .55s var(--e) forwards; }
 .intro-sheen { position: absolute; top: 0; bottom: 0; width: 45%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
   animation: cc-sheen 1.6s ease .5s both; pointer-events: none; }
 .intro-tag { @apply text-slate-400 mt-3 text-sm sm:text-base; animation: cc-tag-in .7s ease 1.15s both; }
@@ -135,10 +190,15 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .fluid-intro { font-size: clamp(2.4rem, 9vw, 4.5rem); }
 .fluid-hero { font-size: clamp(2.6rem, 10vw, 5rem); }
 
+/* ---------- Reduced motion: keep color/state changes, kill the movement ---------- */
 @media (prefers-reduced-motion: reduce) {
   .intro-letter, .intro-sheen, .intro-tag, .intro-eyebrow { animation-duration: .01s; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .page-enter, .anim-fade-up, .anim-fade-in, .anim-slide-in, .anim-pop, .theme-icon { animation: none; }
+  .page-enter, .anim-fade-up, .anim-fade-in, .anim-fade-out, .anim-slide-in, .anim-pop, .anim-pop-in,
+  .pop-in, .pop-out, .bubble-in, .nudge, .theme-icon, .tab-item.active svg { animation: none; }
+  .orb, .marquee-track, .hurry, .hurry-blink, .pointer, .pointer::before, .pointer::after, .toggle-star { animation: none; }
+  .btn-primary::after { display: none; }
+  .reveal { opacity: 1; translate: none; transition: none; }
+  .lift:hover, .row-hover:hover, .btn-primary:hover, .btn-ghost:hover, .toggle:hover { transform: none; translate: none; }
+  .nav-link:hover svg, .brand-mark:hover { transform: none; }
+  input[type="checkbox"]:active { transform: none; }
 }
