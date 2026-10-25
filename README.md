@@ -29,7 +29,7 @@ npm run make-admin -- yourUsername
 ```
 
 ## Env vars (backend/.env — never commit this file)
-PORT, NODE_ENV, MONGO_URI, JWT_SECRET, CLIENT_URL, MAX_FILE_MB (see `backend/.env.example`).
+PORT, NODE_ENV, MONGO_URI, JWT_SECRET, CLIENT_URL, MAX_FILE_MB, CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET (optional: SITE_URL, DNS_SERVERS) — see `backend/.env.example`.
 Frontend split-deploy only: `frontend/.env` with `VITE_SERVER_URL` (see `frontend/.env.example`).
 
 ## Deploy — Option A: Render, single service (recommended, free)

@@ -10,6 +10,9 @@ body { @apply bg-slate-50 text-slate-900 font-body dark:bg-slate-950 dark:text-s
 .input:focus { box-shadow: 0 0 0 4px rgba(79,70,229,.14); border-color: #6366f1; }
 .dark .input:focus { box-shadow: 0 0 0 4px rgba(163,230,53,.1); border-color: #a3e635; }
 
+/* Unread notification count on the navbar bell */
+.notif-badge { @apply absolute -top-1 -right-1 min-w-[1.15rem] h-[1.15rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold grid place-items-center; }
+
 /* ---------- Motion tokens — one matrix for the whole UI ---------- */
 :root {
   --e: cubic-bezier(.22,.8,.3,1);        /* glide — entrances, hovers, slides */
@@ -185,7 +188,9 @@ input[type="checkbox"]:active { transform: scale(.8); }
 .fluid-word { position: relative; display: inline-block; overflow: hidden; font-family: 'Space Grotesk', sans-serif;
   font-weight: 700; letter-spacing: -0.02em; line-height: 1.08;
   background: linear-gradient(100deg, #818cf8, #4f46e5 40%, #65a30d 75%, #818cf8);
-  -webkit-background-clip: text; background-clip: text; color: transparent; }
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: #1e1b4b;
+  text-fill-color: #1e1b4b; color: #1e1b4b; }
 .dark .fluid-word { background: linear-gradient(100deg, #a5b4fc, #fff 45%, #a3e635 70%, #a5b4fc); -webkit-background-clip: text; background-clip: text; }
 .fluid-intro { font-size: clamp(2.4rem, 9vw, 4.5rem); }
 .fluid-hero { font-size: clamp(2.6rem, 10vw, 5rem); }

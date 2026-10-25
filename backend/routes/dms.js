@@ -6,6 +6,7 @@ const { Conversation, DirectMessage } = require('../models/Chat');
 const { authMiddleware } = require('../middleware/auth');
 const { actionRate } = require('../middleware/actionLimits');
 const { containsAbuse } = require('../utils/profanity');
+const { toStr } = require('../utils/sanitize');
 const { enabled: storageEnabled, uploadBuffer } = require('../utils/storage');
 const crypto = require('crypto');
 
@@ -21,7 +22,13 @@ const router = express.Router();
 const pendingUploads = new Map();
 function registerUpload(info, username) {
   pendingUploads.set(info.publicId, { ...info, by: username, at: Date.now() });
-  if (pendingUploads.size > 1000) pendingUploads.clear();
+  if (pendingUploads.size > 1000) {
+    // Evict only expired entries — clearing the whole map would invalidate
+    // other users' freshly uploaded attachments.
+    const cutoff = Date.now() - 15 * 60 * 1000;
+    for (const [id, v] of pendingUploads) if (v.at < cutoff) pendingUploads.delete(id);
+    if (pendingUploads.size > 2000) pendingUploads.clear();
+  }
 }
 function claimUpload(publicId, username) {
   const u = pendingUploads.get(publicId);
@@ -39,7 +46,9 @@ router.get('/conversations', authMiddleware, async (req, res) => {
   }));
 });
 router.post('/conversations', authMiddleware, actionRate('light'), async (req, res) => {
-  const { username } = req.body;
+  // Coerce to a plain string: blocks NoSQL operator injection via JSON
+  // bodies like {"username": {"$ne": null}}.
+  const username = toStr(req.body.username, 20).trim();
   if (!username) return res.status(400).json({ error: 'Username required.' });
   if (username === req.user.username) return res.status(400).json({ error: "Can't message yourself." });
   const other = await User.findOne({ username });
@@ -55,16 +64,23 @@ router.get('/conversations/:id/messages', authMiddleware, async (req, res) => {
   if (!convo.participants.some(p => p.toString() === req.user.id)) return res.status(403).json({ error: 'Not part of this conversation.' });
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
   const f = { conversationId: req.params.id };
-  if (req.query.before) f.createdAt = { $lt: new Date(req.query.before) };
-  res.json(await DirectMessage.find(f).sort({ createdAt: -1 }).limit(limit).lean().then(msgs => msgs.reverse()));
+  const before = req.query.before ? new Date(String(req.query.before)) : null;
+  if (before && !isNaN(before)) f.createdAt = { $lt: before };
+  res.json(await DirectMessage.find(f)
+    .select('-publicId -rawPublicId -rawUrl -resourceType')
+    .sort({ createdAt: -1 }).limit(limit).lean().then(msgs => msgs.reverse()));
 });
 
 // Documents for DMs: memory-upload straight to Cloudinary (nothing on our
 // disk). Returns an attachment token (publicId) — the client then sends it
 // inside the socket 'dm message', which claims + verifies it below.
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 },
+const MAX_FILE_MB = Math.min(50, Math.max(1, Number(process.env.MAX_FILE_MB) || 15));
+const UPLOAD_EXT = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.doc', '.docx', '.txt']);
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_MB * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const ok = /pdf|jpg|jpeg|png|webp|doc|docx|txt/.test(path.extname(file.originalname).toLowerCase());
+    // Exact extension match — a substring test would accept names like
+    // "malware.notpdf" just because they contain "pdf".
+    const ok = UPLOAD_EXT.has(path.extname(file.originalname).toLowerCase());
     return ok ? cb(null, true) : cb(new Error('Only PDF, images, DOC/DOCX or TXT files.'));
   } });
 
@@ -99,6 +115,9 @@ router.post('/messages/:msgId/view-token', authMiddleware, async (req, res) => {
   }
   const t = crypto.randomBytes(16).toString('hex');
   dmViewTokens.set(t, { msgId: m._id.toString(), userId: req.user.id, exp: Date.now() + 60000 });
+  if (dmViewTokens.size > 2000) {
+    for (const [k, v] of dmViewTokens) if (v.exp < Date.now()) dmViewTokens.delete(k);
+  }
   res.json({ token: t });
 });
 
@@ -114,14 +133,16 @@ router.get('/attachments/:msgId/view', async (req, res) => {
     return res.status(403).json({ error: 'Not part of this conversation.' });
   }
   try {
-    const upstream = await fetch(m.rawUrl || m.fileUrl);
+    const upstream = await fetch(m.rawUrl || m.fileUrl, { signal: AbortSignal.timeout(20000) });
     if (!upstream.ok) throw new Error('upstream ' + upstream.status);
     const ext = (m.fileName || '').match(/\.[a-zA-Z0-9]{2,5}$/);
     res.setHeader('Content-Type', DM_MIME[(ext || [''])[0].toLowerCase()] || 'application/octet-stream');
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('Cache-Control', 'private, max-age=3600');
     const { Readable } = require('stream');
-    Readable.fromWeb(upstream.body).pipe(res);
+    const stream = Readable.fromWeb(upstream.body);
+    stream.on('error', (err) => { console.error('dm view stream error:', err.message); res.destroy(err); });
+    stream.pipe(res);
   } catch (e) {
     console.error('dm view stream failed:', e.message);
     res.status(502).json({ error: 'Could not load preview.' });

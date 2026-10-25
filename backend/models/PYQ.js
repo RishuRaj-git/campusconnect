@@ -1,15 +1,15 @@
 const mongoose = require('mongoose');
 
 const pyqSchema = new mongoose.Schema({
-  branch: { type: String, required: true, trim: true },
-  subject: { type: String, required: true, trim: true },
-  year: { type: Number, required: true },
+  branch: { type: String, required: true, trim: true, maxlength: 80 },
+  subject: { type: String, required: true, trim: true, maxlength: 120 },
+  year: { type: Number, required: true, min: 1900, max: 2100 },
   semester: { type: Number, min: 1, max: 8 },
   examType: { type: String, enum: ['Mid-Term', 'End-Term', 'Internal', 'Practical', 'Other'], default: 'Other' },
-  title: { type: String, required: true, trim: true },
-  notes: { type: String, trim: true },
+  title: { type: String, required: true, trim: true, maxlength: 200 },
+  notes: { type: String, trim: true, maxlength: 3000 },
   fileUrl: { type: String },
-  fileName: { type: String },
+  fileName: { type: String, maxlength: 255 },
   publicId: { type: String }, // primary asset (images: the file; PDFs: image copy for page previews)
   resourceType: { type: String },
   rawPublicId: { type: String }, // PDFs only: extensionless raw copy that actually downloads

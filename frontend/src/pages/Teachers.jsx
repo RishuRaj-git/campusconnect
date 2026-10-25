@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import api, { SERVER_URL, downloadPyq } from '../api';
+import api, { downloadPyq } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -39,8 +39,10 @@ export function Teachers() {
   const [form, setForm] = useState({ name: '', department: '', subjects: '', bio: '' });
 
   const load = async () => {
-    const { data } = await api.get('/teachers', { params: { q, dept } });
-    setItems(data);
+    try {
+      const { data } = await api.get('/teachers', { params: { q, dept } });
+      setItems(data);
+    } catch { /* keep previous list on transient failure */ }
   };
   useEffect(() => { api.get('/teachers/departments').then(r => setDepts(r.data)).catch(() => {}); load(); }, []);
 
@@ -59,7 +61,7 @@ export function Teachers() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2 items-center">
-        <input className="input !w-auto flex-1 min-w-[160px]" placeholder="Search teachers…" value={q} onChange={e => setQ(e.target.value)} />
+        <input className="input !w-auto flex-1 min-w-[160px]" placeholder="Search teachers…" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && load()} />
         <select className="input !w-auto" value={dept} onChange={e => setDept(e.target.value)}>
           <option value="">All departments</option>
           {depts.map(d => <option key={d} value={d}>{d}</option>)}
@@ -76,6 +78,7 @@ export function Teachers() {
             <input className="input" placeholder="Department (e.g. CSE)" value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} />
           </div>
           <input className="input" placeholder="Subjects (comma separated)" value={form.subjects} onChange={e => setForm({ ...form, subjects: e.target.value })} />
+          <textarea className="input" rows="2" placeholder="Short bio (optional)" value={form.bio} onChange={e => setForm({ ...form, bio: e.target.value })} />
           <button className="btn-primary">Add</button>
         </form>
       )}
@@ -98,11 +101,18 @@ export function TeacherDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const [d, setD] = useState(null);
+  const [err, setErr] = useState(false);
   const [scores, setScores] = useState({ teaching: 5, grading: 5, attendance: 3, pyqRep: 5 });
   const [comment, setComment] = useState('');
 
-  const load = async () => setD((await api.get(`/teachers/${id}`)).data);
-  useEffect(() => { load(); }, [id]);
+  const load = async () => {
+    try {
+      setD((await api.get(`/teachers/${id}`)).data);
+    } catch {
+      setErr(true);
+    }
+  };
+  useEffect(() => { setD(null); setErr(false); load(); }, [id]);
   usePageMeta(d ? { title: `${d.teacher.name} — rating & notes`, description: `Ratings, reviews and notes for ${d.teacher.name} on CampusConnect.` } : { title: 'Teacher' });
 
   const rate = async (e) => {
@@ -115,6 +125,15 @@ export function TeacherDetail() {
     } catch (err) { alert(err.response?.data?.error || 'Login required to rate'); }
   };
 
+  if (err) {
+    return (
+      <div className="card space-y-2 anim-fade-up">
+        <p className="font-bold">Teacher not found. 🕵️</p>
+        <p className="text-sm opacity-70">This profile may have been removed.</p>
+        <Link to="/teachers" className="btn-ghost text-sm inline-block">← All teachers</Link>
+      </div>
+    );
+  }
   if (!d) return <div className="skeleton h-64" />;
   const { teacher: t, stats, reviews, notes } = d;
 
@@ -177,7 +196,7 @@ export function TeacherDetail() {
             <div key={n._id} className="lift border border-slate-200 dark:border-slate-800 rounded-xl p-3">
               <p className="font-bold text-sm">{n.title}</p>
               <p className="text-xs opacity-60">{n.branch} • {n.subject} • {n.year}</p>
-              {n.fileUrl && <button className="text-brand-600 text-sm" onClick={() => downloadPyq(n._id).catch(() => alert('Login required to download'))}>Download →</button>}
+              {n.fileName && <button className="text-brand-600 text-sm" onClick={() => downloadPyq(n._id).catch(() => alert('Login required to download'))}>Download →</button>}
             </div>
           ))}
           {notes.length === 0 && <p className="text-sm opacity-60">No notes tagged yet — upload one from the <Link to="/pyq" className="text-brand-600">PYQs page</Link> and pick this teacher.</p>}

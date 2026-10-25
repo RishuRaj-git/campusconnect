@@ -30,7 +30,9 @@ if (process.env.JWT_SECRET.length < 32) {
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: (process.env.CLIENT_URL || 'http://localhost:5173').split(','), methods: ['GET', 'POST'] } });
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+const io = new Server(server, { cors: { origin: allowedOrigins, methods: ['GET', 'POST'] } });
 
 // Behind Render/Railway/Heroku proxies — required for correct IPs in rate limiting
 app.set('trust proxy', 1);
@@ -54,7 +56,7 @@ app.use(helmet({
   }
 }));
 app.use(require('compression')());
-app.use(cors({ origin: (process.env.CLIENT_URL || 'http://localhost:5173').split(',') }));
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: '1mb' }));
 if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge: '7d' }));
@@ -125,19 +127,18 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 app.get('/sitemap.xml', async (req, res) => {
   try {
     const base = (process.env.SITE_URL || 'https://campusconnect-mlfb.onrender.com').replace(/\/$/, '');
-    const Discussion = require('./models/Discussion');
     const { Teacher } = require('./models/Teacher');
-    const [ds, ts] = await Promise.all([
-      Discussion.find().sort({ updatedAt: -1 }).limit(200).select('_id updatedAt').lean(),
-      Teacher.find().sort({ updatedAt: -1 }).limit(200).select('_id updatedAt').lean()
-    ]);
+    // Discussions have no individual URLs (the SPA lists them on one page),
+    // so they must NOT be repeated here — duplicate <loc> entries get the
+    // sitemap flagged as low-quality by Google.
+    const ts = await Teacher.find().sort({ updatedAt: -1 }).limit(200).select('_id updatedAt').lean();
+    // /auth is noindex, so it is intentionally absent here.
     const urls = [
-      '', '/auth', '/discussions', '/chat', '/pyq', '/teachers', '/exams', '/privacy'
-    ].map((p) => `  <url><loc>${base}${p || '/'}</loc></url>`).join('\n');
-    const dUrls = ds.map((d) => `  <url><loc>${base}/discussions</loc><lastmod>${d.updatedAt.toISOString().split('T')[0]}</lastmod></url>`).join('\n');
+      '', '/discussions', '/chat', '/pyq', '/teachers', '/exams', '/privacy'
+    ].map((p) => `<url><loc>${base}${p || '/'}</loc></url>`).join('\n');
     const tUrls = ts.map((t) => `  <url><loc>${base}/teachers/${t._id}</loc><lastmod>${t.updatedAt.toISOString().split('T')[0]}</lastmod></url>`).join('\n');
     res.header('Content-Type', 'application/xml');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n${dUrls}\n${tUrls}\n</urlset>`);
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n${tUrls}\n</urlset>`);
   } catch (e) {
     res.status(500).send('sitemap unavailable');
   }
@@ -155,7 +156,7 @@ if (fs.existsSync(path.join(webDist, 'index.html'))) {
       if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
     }
   }));
-  app.get(/^\/(?!api|uploads|socket\.io).*/, (req, res) =>
+  app.get(/^\/(?!api|uploads|socket\.io|assets).*/, (req, res) =>
     res.sendFile(path.join(webDist, 'index.html')));
 }
 
@@ -171,6 +172,12 @@ app.use((err, req, res, next) => {
   if (err && err.name === 'ValidationError') {
     return res.status(400).json({ error: 'Invalid data sent to server.' });
   }
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request is too large.' });
+  }
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON body.' });
+  }
   console.error(err);
   res.status(500).json({ error: 'Something went wrong.' });
 });
@@ -179,13 +186,18 @@ app.use((err, req, res, next) => {
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
-    if (token) socket.data.user = jwt.verify(token, process.env.JWT_SECRET);
+    if (token) socket.data.user = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     next();
   } catch { next(); }
 });
 
 io.on('connection', async (socket) => {
-  const ip = socket.handshake.address || 'unknown';
+  // Behind Render's proxy every socket's peer address is the proxy, which
+  // would make the per-IP connection limit global. Use the first forwarded
+  // hop when Express is configured to trust the proxy.
+  const forwarded = socket.handshake.headers['x-forwarded-for'];
+  const ip = (app.get('trust proxy') && typeof forwarded === 'string' && forwarded.split(',')[0].trim())
+    || socket.handshake.address || 'unknown';
   if (!connBucket.take(ip)) {
     socket.emit('chat message blocked', { reason: 'Too many connections — please wait a moment and refresh.' });
     socket.disconnect(true);
@@ -200,57 +212,77 @@ io.on('connection', async (socket) => {
   // NOTE: handlers are registered BEFORE the history fetch below. History
   // needs a DB round-trip (slow on cold Atlas); anything sent in that window
   // would otherwise vanish silently.
-  socket.on('chat message', async (data) => {
-    // Sender identity comes ONLY from the verified JWT — never from the
-    // client payload (otherwise anyone could impersonate anyone).
-    const name = socket.data.username;
-    if (!name) { socket.emit('chat message blocked', { reason: 'Login to chat.' }); return; }
-    if (!data.message) return;
-    if (!msgBucket.take(`chat:${name}`)) { socket.emit('chat message blocked', { reason: 'Slow down — you are sending messages too fast.' }); return; }
-    const now = Date.now();
-    const prev = lastChat.get(name);
-    const cleanMsg = String(data.message).slice(0, 1000);
-    if (prev && prev.text === cleanMsg && now - prev.at < 30000) {
-      socket.emit('chat message blocked', { reason: 'You already sent that — no need to repeat it.' });
-      return;
+  socket.on('chat message', async (raw) => {
+    try {
+      // Never destructure the client payload directly: `emit('chat message',
+      // null)` would throw and (because socket handlers are async) crash the
+      // process via the unhandledRejection handler.
+      const data = raw && typeof raw === 'object' ? raw : {};
+      // Sender identity comes ONLY from the verified JWT — never from the
+      // client payload (otherwise anyone could impersonate anyone).
+      const name = socket.data.username;
+      if (!name) { socket.emit('chat message blocked', { reason: 'Login to chat.' }); return; }
+      const cleanMsg = String(data.message || '').slice(0, 1000).trim();
+      if (!cleanMsg) return;
+      if (!msgBucket.take(`chat:${name}`)) { socket.emit('chat message blocked', { reason: 'Slow down — you are sending messages too fast.' }); return; }
+      const now = Date.now();
+      const prev = lastChat.get(name);
+      if (prev && prev.text === cleanMsg && now - prev.at < 30000) {
+        socket.emit('chat message blocked', { reason: 'You already sent that — no need to repeat it.' });
+        return;
+      }
+      lastChat.set(name, { text: cleanMsg, at: now });
+      if (lastChat.size > 2000) lastChat.clear();
+      if ((await User.findOne({ username: name }).select('isBanned'))?.isBanned) {
+        socket.emit('chat message blocked', { reason: 'Your account has been suspended.' });
+        socket.disconnect(true);
+        return;
+      }
+      if (containsAbuse(cleanMsg)) { socket.emit('chat message blocked', { reason: 'Please keep it respectful.' }); return; }
+      const payload = { username: name, message: cleanMsg, createdAt: new Date() };
+      io.emit('chat message', payload);
+      await ChatMessage.create(payload);
+    } catch (e) {
+      console.error('chat error', e);
+      socket.emit('chat message blocked', { reason: 'Message could not be sent. Try again.' });
     }
-    lastChat.set(name, { text: cleanMsg, at: now });
-    if (lastChat.size > 2000) lastChat.clear();
-    if ((await User.findOne({ username: name }).select('isBanned'))?.isBanned) {
-      socket.emit('chat message blocked', { reason: 'Your account has been suspended.' });
-      socket.disconnect(true);
-      return;
-    }
-    if (containsAbuse(cleanMsg)) { socket.emit('chat message blocked', { reason: 'Please keep it respectful.' }); return; }
-    const payload = { username: name, message: cleanMsg, createdAt: new Date() };
-    io.emit('chat message', payload);
-    try { await ChatMessage.create(payload); } catch (e) { console.error(e); }
   });
 
-  socket.on('dm message', async ({ conversationId, toUsername, text, attachment }) => {
+  socket.on('dm message', async (raw) => {
+    // See the note in the chat handler: guard against null/primitive payloads.
+    const { conversationId, text, attachment } = raw && typeof raw === 'object' ? raw : {};
     const from = socket.data.username;
-    if (!from || !conversationId) return;
-    const cleanDm = String(text || '').slice(0, 2000);
-    // Attachment allowed ONLY if it came from POST /dms/upload by this same
-    // user moments ago (registry claim) — kills malicious-URL injection.
-    let file = null;
-    if (attachment && attachment.publicId) {
-      const dmsRouter = require('./routes/dms');
-      file = dmsRouter.claimUpload ? dmsRouter.claimUpload(String(attachment.publicId), from) : null;
-      if (!file) return; // forged or expired attachment — drop silently
-    }
-    if (!cleanDm && !file) return;
-    if (!msgBucket.take(`dm:${from}`)) { socket.emit('chat message blocked', { reason: 'Slow down — you are sending messages too fast.' }); return; }
-    if ((await User.findOne({ username: from }).select('isBanned'))?.isBanned) {
-      socket.emit('chat message blocked', { reason: 'Your account has been suspended.' });
-      socket.disconnect(true);
-      return;
-    }
-    if (containsAbuse(cleanDm)) { socket.emit('chat message blocked', { reason: 'Please keep it respectful.' }); return; }
+    const userId = socket.data.user?.id;
+    if (!from || !userId || !conversationId || !mongoose.isValidObjectId(conversationId)) return;
+    const cleanDm = String(text || '').slice(0, 2000).trim();
     try {
-      const convo = await Conversation.findById(conversationId);
+      const convo = await Conversation.findById(conversationId).select('participants');
       if (!convo) return;
-      if (!convo.participants.some((p) => p.toString() === socket.data.user?.id)) return; // not your chat
+      if (!convo.participants.some((p) => p.toString() === userId)) return; // not your chat
+      // Recipient comes from the conversation, NEVER from the client payload
+      // (a spoofed toUsername could spam notifications to any user).
+      const otherId = convo.participants.find((p) => p.toString() !== userId);
+      if (!otherId) return;
+      const other = await User.findById(otherId).select('username');
+      if (!other) return;
+      const toUsername = other.username;
+
+      // Attachment allowed ONLY if it came from POST /dms/upload by this same
+      // user moments ago (registry claim) — kills malicious-URL injection.
+      let file = null;
+      if (attachment && attachment.publicId) {
+        const dmsRouter = require('./routes/dms');
+        file = dmsRouter.claimUpload ? dmsRouter.claimUpload(String(attachment.publicId), from) : null;
+        if (!file) return; // forged or expired attachment — drop silently
+      }
+      if (!cleanDm && !file) return;
+      if (!msgBucket.take(`dm:${from}`)) { socket.emit('chat message blocked', { reason: 'Slow down — you are sending messages too fast.' }); return; }
+      if ((await User.findOne({ username: from }).select('isBanned'))?.isBanned) {
+        socket.emit('chat message blocked', { reason: 'Your account has been suspended.' });
+        socket.disconnect(true);
+        return;
+      }
+      if (containsAbuse(cleanDm)) { socket.emit('chat message blocked', { reason: 'Please keep it respectful.' }); return; }
       const dm = await DirectMessage.create({
         conversationId, sender: from, text: cleanDm,
         ...(file ? { fileUrl: file.fileUrl, fileName: file.fileName, publicId: file.publicId, resourceType: file.resourceType, rawPublicId: file.rawPublicId, rawUrl: file.rawUrl } : {})

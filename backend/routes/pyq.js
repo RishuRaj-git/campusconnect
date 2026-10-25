@@ -1,5 +1,6 @@
 const express = require('express');
 const multer = require('multer');
+const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
 const PYQ = require('../models/PYQ');
@@ -48,35 +49,49 @@ router.get('/:id/view', async (req, res) => {
     return res.sendFile(path.join(__dirname, '..', pyq.fileUrl.replace('/uploads', 'uploads')));
   }
   try {
-    const upstream = await fetch(pyq.fileUrl);
+    const upstream = await fetch(pyq.fileUrl, { signal: AbortSignal.timeout(20000) });
     if (!upstream.ok) throw new Error('upstream ' + upstream.status);
     res.setHeader('Content-Type', mimeFor(pyq.fileName));
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('Cache-Control', 'private, max-age=3600');
     const { Readable } = require('stream');
-    Readable.fromWeb(upstream.body).pipe(res);
+    const stream = Readable.fromWeb(upstream.body);
+    // Without an error listener a mid-stream upstream failure becomes an
+    // uncaught 'error' event (which would kill the whole process).
+    stream.on('error', (err) => { console.error('view stream error:', err.message); res.destroy(err); });
+    stream.pipe(res);
   } catch (e) {
     console.error('view stream failed:', e.message);
     res.status(502).json({ error: 'Could not load preview.' });
   }
 });
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => /pdf|jpg|jpeg|png/.test(path.extname(file.originalname).toLowerCase()) ? cb(null, true) : cb(new Error('Only PDF/JPG/PNG')) });
+const MAX_FILE_MB = Math.min(50, Math.max(1, Number(process.env.MAX_FILE_MB) || 15));
+const PYQ_EXT = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_MB * 1024 * 1024 },
+  fileFilter: (req, file, cb) => PYQ_EXT.has(path.extname(file.originalname).toLowerCase()) ? cb(null, true) : cb(new Error('Only PDF/JPG/PNG')) });
 const { enabled: storageEnabled, uploadBuffer, destroyFile } = require('../utils/storage');
 
 router.get('/', async (req, res) => {
-  const { branch, subject, year, teacher } = req.query;
+  // Sanitise every filter: Express's query parser turns `?branch[$ne]=x`
+  // into an object, which would otherwise reach Mongo as a query operator.
+  const branch = toStr(req.query.branch, 80).trim();
+  const subject = toStr(req.query.subject, 120).trim();
+  const teacher = toStr(req.query.teacher, 60).trim();
+  const yearNum = Number(req.query.year);
   const f = {};
   if (branch) f.branch = branch;
   if (subject) f.subject = subject;
-  if (year) f.year = Number(year);
-  if (teacher) f.teacher = teacher;
+  if (Number.isInteger(yearNum)) f.year = yearNum;
+  if (mongoose.isValidObjectId(teacher)) f.teacher = teacher;
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
   const [total, items] = await Promise.all([
     PYQ.countDocuments(f),
+    // Never expose storage URLs/public ids in the public listing — that would
+    // let anyone bypass the login-gated /download and /view endpoints.
     PYQ.find(f).sort({ year: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit)
+      .select('-fileUrl -publicId -rawPublicId -rawUrl -resourceType')
       .populate('uploadedBy', 'username').populate('teacher', 'name').lean()
   ]);
   res.set('X-Total-Count', String(total));
@@ -87,16 +102,28 @@ router.get('/meta', async (req, res) => {
   res.json({ branches: branches.sort(), subjects: subjects.sort(), years: years.sort((a, b) => b - a) });
 });
 router.post('/upload', authMiddleware, actionRate('upload'), upload.single('file'), async (req, res) => {
-  const { branch, subject, year, semester, examType, title, notes, teacherName } = req.body;
-  if (!branch || !subject || !year || !title) return res.status(400).json({ error: 'Branch, subject, year, title required.' });
+  const branch = toStr(req.body.branch, 80).trim();
+  const subject = toStr(req.body.subject, 120).trim();
+  const title = toStr(req.body.title, 200).trim();
+  const notes = toStr(req.body.notes, 3000).trim();
+  const teacherName = toStr(req.body.teacherName, 100).trim();
+  const year = Number(req.body.year);
+  const semesterNum = req.body.semester === '' || req.body.semester === undefined ? null : Number(req.body.semester);
+  const examTypes = ['Mid-Term', 'End-Term', 'Internal', 'Practical', 'Other'];
+  const examType = examTypes.includes(req.body.examType) ? req.body.examType : 'Other';
+  if (!branch || !subject || !title) return res.status(400).json({ error: 'Branch, subject, title required.' });
+  if (!Number.isInteger(year) || year < 1900 || year > 2100) return res.status(400).json({ error: 'Year must be a valid 4-digit year.' });
+  if (semesterNum !== null && (!Number.isInteger(semesterNum) || semesterNum < 1 || semesterNum > 8)) {
+    return res.status(400).json({ error: 'Semester must be 1–8.' });
+  }
   if (!req.file && !notes) return res.status(400).json({ error: 'Upload a file or add notes.' });
-  if (containsAbuse(title) || containsAbuse(notes || '')) {
+  if (containsAbuse(title) || containsAbuse(notes)) {
     return res.status(400).json({ error: 'Please keep it respectful — title/notes blocked.' });
   }
   let teacher;
-  if (teacherName && String(teacherName).trim()) {
+  if (teacherName) {
     const { Teacher } = require('../models/Teacher');
-    const match = await Teacher.findOne({ name: new RegExp(`^${escapeRegExp(toStr(teacherName, 100))}$`, 'i') }).select('_id');
+    const match = await Teacher.findOne({ name: new RegExp(`^${escapeRegExp(teacherName)}$`, 'i') }).select('_id');
     if (match) teacher = match._id; // links only to existing teachers — add new ones from the Teachers page
   }
   let fileUrl, fileName, publicId, resourceType, rawPublicId, rawUrl, pageCount = 1;
@@ -124,7 +151,7 @@ router.post('/upload', authMiddleware, actionRate('upload'), upload.single('file
       return res.status(500).json({ error: 'Upload to storage failed. Try again.' });
     }
   }
-  const pyq = await new PYQ({ branch, subject, year: Number(year), semester: semester || undefined, examType: examType || 'Other', title, notes, teacher,
+  const pyq = await new PYQ({ branch, subject, year, semester: semesterNum ?? undefined, examType, title, notes, teacher,
     fileUrl, fileName, publicId, resourceType, rawPublicId, rawUrl, pageCount, uploadedBy: req.user.id }).save();
   res.status(201).json(pyq);
 });
@@ -133,24 +160,15 @@ router.post('/upload', authMiddleware, actionRate('upload'), upload.single('file
 // frontend fetches this with its token and opens the returned URL).
 // PDFs download via their raw copy (this account 401s `.pdf`-suffixed URLs).
 router.get('/:id/download', authMiddleware, async (req, res) => {
-  const pyq = await PYQ.findByIdAndUpdate(req.params.id, { $inc: { downloads: 1 } }, { new: true });
+  const pyq = await PYQ.findById(req.params.id);
   if (!pyq?.fileUrl) return res.status(404).json({ error: 'File not found.' });
+  pyq.downloads += 1; // count only successful downloads, not 404s
+  await pyq.save();
   res.json({ url: pyq.rawUrl || pyq.fileUrl, fileName: pyq.fileName });
 });
-// GET /api/pyq/:id/pages — LOGIN REQUIRED. Scribd-style page images for the
-// in-app reader: [{ n, url }]. Rendered by Cloudinary (f_jpg,pg_N), cached
-// after first view, plain <img> tags (no PDF engine, no iframe, no CSP pain).
-router.get('/:id/pages', authMiddleware, async (req, res) => {
-  const pyq = await PYQ.findById(req.params.id).select('publicId resourceType pageCount fileName');
-  if (!pyq?.publicId) return res.status(404).json({ error: 'No previewable file.' });
-  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
-  const n = Math.min(Math.max(pyq.pageCount || 1, 1), 200);
-  const pages = [];
-  for (let i = 1; i <= n; i++) {
-    pages.push({ n: i, url: `https://res.cloudinary.com/${cloud}/image/upload/f_jpg,pg_${i},w_1200/${pyq.publicId}.jpg` });
-  }
-  res.json({ pages, total: n });
-});
+// NOTE: the old /:id/pages endpoint was removed — it handed any logged-in user
+// a direct Cloudinary URL for the asset (bypassing the login-gated view/download
+// flow and the download counter). Previews now always stream via /:id/view.
 router.delete('/:id', authMiddleware, async (req, res) => {
   const pyq = await PYQ.findById(req.params.id);
   if (!pyq) return res.status(404).json({ error: 'Not found.' });

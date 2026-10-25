@@ -63,6 +63,9 @@ module.exports = (io) => {
     }
     const d = await Discussion.findById(req.params.id);
     if (!d) return res.status(404).json({ error: 'Not found.' });
+    // Cap thread length so one question can't grow into an unbounded document
+    // that every list request has to serialise.
+    if (d.comments.length >= 300) return res.status(400).json({ error: 'This thread is full — start a new question.' });
     d.comments.push({ author: req.user.username, authorId: req.user.id, text, likes: [] });
     await d.save();
     notify(io, { recipient: d.author, type: 'comment', fromUser: req.user.username, refId: d._id.toString(), text: `${req.user.username} commented on "${d.title}"` });

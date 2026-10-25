@@ -2,5 +2,7 @@ User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /dms
+Disallow: /profile
+Disallow: /auth
 
 Sitemap: https://campusconnect-mlfb.onrender.com/sitemap.xml

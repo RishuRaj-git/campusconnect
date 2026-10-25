@@ -24,11 +24,22 @@ router.get('/users', async (req, res) => {
   res.set('X-Total-Count', String(total));
   res.json(users);
 });
+async function setBan(username, isBanned) {
+  // Never let an admin ban another admin (or themselves) — that would let an
+  // admin lock the whole moderation team out.
+  const target = await User.findOne({ username: String(username).slice(0, 20) }).select('username isAdmin');
+  if (!target) return { status: 404, body: { error: 'User not found.' } };
+  if (target.isAdmin) return { status: 400, body: { error: 'Admins cannot be banned.' } };
+  await User.updateOne({ username: target.username }, { isBanned });
+  return { status: 200, body: { username: target.username, isBanned } };
+}
 router.post('/users/:username/ban', async (req, res) => {
-  res.json(await User.findOneAndUpdate({ username: req.params.username }, { isBanned: true }, { new: true }).select('username isBanned'));
+  const r = await setBan(req.params.username, true);
+  res.status(r.status).json(r.body);
 });
 router.post('/users/:username/unban', async (req, res) => {
-  res.json(await User.findOneAndUpdate({ username: req.params.username }, { isBanned: false }, { new: true }).select('username isBanned'));
+  const r = await setBan(req.params.username, false);
+  res.status(r.status).json(r.body);
 });
 router.get('/discussions', async (req, res) => res.json(await Discussion.find().sort({ _id: -1 }).limit(50).lean()));
 router.delete('/discussions/:id', async (req, res) => { await Discussion.findByIdAndDelete(req.params.id); res.json({ message: 'Deleted.' }); });

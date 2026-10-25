@@ -40,11 +40,12 @@ function pageParams(req, def = 20, max = 50) {
 
 // GET /api/teachers — directory with search + dept filter
 router.get('/', async (req, res) => {
-  const { q, dept } = req.query;
+  const q = toStr(req.query.q, 100).trim();
+  const dept = toStr(req.query.dept, 50).trim();
   const filter = {};
   if (q) filter.$text = { $search: q };
-  if (dept) filter.department = new RegExp(`^${escapeRegExp(toStr(dept, 50))}$`, 'i');
-  const { limit, skip } = pageParams(req);
+  if (dept) filter.department = new RegExp(`^${escapeRegExp(dept)}$`, 'i');
+  const { limit, skip } = pageParams(req, 20, 100);
   const [total, items] = await Promise.all([
     Teacher.countDocuments(filter),
     Teacher.find(filter, q ? { score: { $meta: 'textScore' } } : {})
@@ -69,18 +70,23 @@ router.get('/reviews/flagged', authMiddleware, adminOnly, async (req, res) => {
 
 // POST /api/teachers — any logged-in user can add a teacher
 router.post('/', authMiddleware, actionRate('light'), async (req, res) => {
-  const { name, department, subjects, bio } = req.body;
-  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Teacher name is required.' });
-  if (typeof bio === 'string' && bio && containsAbuse(bio)) {
-    return res.status(400).json({ error: 'Please keep it respectful — bio blocked.' });
+  const name = toStr(req.body.name, 100).trim();
+  const department = toStr(req.body.department, 50).trim();
+  const bio = toStr(req.body.bio, 500).trim();
+  const subjects = Array.isArray(req.body.subjects)
+    ? req.body.subjects.map((s) => toStr(s, 60).trim()).filter(Boolean).slice(0, 15)
+    : [];
+  if (!name) return res.status(400).json({ error: 'Teacher name is required.' });
+  if (containsAbuse(name) || containsAbuse(department) || containsAbuse(bio)) {
+    return res.status(400).json({ error: 'Please keep it respectful.' });
   }
-  const existing = await Teacher.findOne({ name: new RegExp(`^${escapeRegExp(toStr(name, 100))}$`, 'i') });
+  const existing = await Teacher.findOne({ name: new RegExp(`^${escapeRegExp(name)}$`, 'i') });
   if (existing) return res.json(existing); // idempotent — no duplicates
   const t = await new Teacher({
-    name: String(name).trim().slice(0, 100),
-    department: String(department || '').slice(0, 50),
-    subjects: Array.isArray(subjects) ? subjects.map((s) => String(s).slice(0, 60)).slice(0, 15) : [],
-    bio: String(bio || '').slice(0, 500),
+    name,
+    department,
+    subjects,
+    bio,
     addedBy: req.user.id
   }).save();
   res.status(201).json(t);
@@ -105,6 +111,7 @@ router.get('/:id', async (req, res) => {
     Rating.find({ teacher: t._id, hidden: false }).sort({ createdAt: -1 }).limit(20).lean()
       .then((rs) => rs.map(({ rater, ...r }) => r)), // never leak who rated
     PYQ.find({ teacher: t._id }).sort({ year: -1 }).limit(20)
+      .select('-fileUrl -publicId -rawPublicId -rawUrl -resourceType')
       .populate('uploadedBy', 'username').lean()
   ]);
   res.json({
@@ -120,7 +127,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/teachers/:id/rate — one rating per user (upsert), comment moderated
-router.post('/:id/rate', authMiddleware, async (req, res) => {
+router.post('/:id/rate', authMiddleware, actionRate('like'), async (req, res) => {
   const t = await Teacher.findById(req.params.id);
   if (!t) return res.status(404).json({ error: 'Teacher not found.' });
   const dims = ['teaching', 'grading', 'attendance', 'pyqRep'];
@@ -130,7 +137,7 @@ router.post('/:id/rate', authMiddleware, async (req, res) => {
     if (!Number.isInteger(v) || v < 1 || v > 5) return res.status(400).json({ error: `Score "${d}" must be 1–5.` });
     scores[d] = v;
   }
-  const comment = String(req.body.comment || '').slice(0, 500);
+  const comment = toStr(req.body.comment, 500).trim();
   if (comment && containsAbuse(comment)) {
     return res.status(400).json({ error: 'Please keep it respectful — review blocked. Rate the teaching, not the person.' });
   }
@@ -156,6 +163,7 @@ router.delete('/:id', authMiddleware, adminOnly, async (req, res) => {
   const t = await Teacher.findById(req.params.id);
   if (!t) return res.status(404).json({ error: 'Teacher not found.' });
   await Rating.deleteMany({ teacher: t._id });
+  await PYQ.updateMany({ teacher: t._id }, { $unset: { teacher: 1 } }); // keep notes, drop dangling ref
   await t.deleteOne();
   res.json({ message: 'Teacher removed.' });
 });

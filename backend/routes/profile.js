@@ -5,36 +5,55 @@ const fs = require('fs');
 const User = require('../models/User');
 const Discussion = require('../models/Discussion');
 const PYQ = require('../models/PYQ');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const { actionRate } = require('../middleware/actionLimits');
 const { containsAbuse } = require('../utils/profanity');
 
 const router = express.Router();
 // Memory storage — avatars stream straight to Cloudinary, never touch disk.
+const AVATAR_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const upload = multer({ storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => /jpg|jpeg|png|webp/.test(path.extname(file.originalname).toLowerCase()) ? cb(null, true) : cb(new Error('Only JPG/PNG/WEBP')) });
+  fileFilter: (req, file, cb) => AVATAR_EXT.has(path.extname(file.originalname).toLowerCase()) ? cb(null, true) : cb(new Error('Only JPG/PNG/WEBP')) });
 const { enabled: storageEnabled, uploadBuffer, destroyFile } = require('../utils/storage');
 
-router.get('/:username', async (req, res) => {
+router.get('/:username', optionalAuth, async (req, res) => {
   const user = await User.findOne({ username: req.params.username }).select('-password -avatarPublicId');
   if (!user) return res.status(404).json({ error: 'User not found.' });
   const [discussionCount, pyqCount] = await Promise.all([
     Discussion.countDocuments({ author: user.username }), PYQ.countDocuments({ uploadedBy: user._id })]);
-  res.json({ username: user.username, branch: user.branch, semester: user.semester, year: user.year, enrollmentNo: user.enrollmentNo, bio: user.bio, avatarUrl: user.avatarUrl, stats: { discussionCount, pyqCount } });
+  const own = req.user && req.user.username === user.username;
+  res.json({
+    username: user.username, branch: user.branch, semester: user.semester, year: user.year,
+    // Enrollment numbers are personal data — only their owner gets them back.
+    ...(own ? { enrollmentNo: user.enrollmentNo } : {}),
+    bio: user.bio, avatarUrl: user.avatarUrl,
+    stats: { discussionCount, pyqCount }
+  });
 });
 router.put('/', authMiddleware, actionRate('light'), async (req, res) => {
   const { branch, semester, year, enrollmentNo, bio } = req.body;
-  if (typeof bio === 'string' && bio && containsAbuse(bio)) {
-    return res.status(400).json({ error: 'Please keep it respectful — bio blocked.' });
+  const fields = { bio, branch, enrollmentNo };
+  for (const value of Object.values(fields)) {
+    if (typeof value === 'string' && value && containsAbuse(value)) {
+      return res.status(400).json({ error: 'Please keep it respectful — profile blocked.' });
+    }
   }
   const update = {};
   if (branch !== undefined) update.branch = String(branch).slice(0, 50);
-  if (semester !== undefined) update.semester = semester;
-  if (year !== undefined) update.year = year;
+  if (semester !== undefined) {
+    if (semester === '' || semester === null) update.semester = null;
+    else {
+      const n = Number(semester);
+      if (!Number.isInteger(n) || n < 1 || n > 8) return res.status(400).json({ error: 'Semester must be 1–8.' });
+      update.semester = n;
+    }
+  }
+  if (year !== undefined) update.year = String(year).slice(0, 20);
   if (enrollmentNo !== undefined) update.enrollmentNo = String(enrollmentNo).slice(0, 50);
   if (bio !== undefined) update.bio = String(bio).slice(0, 200);
-  res.json(await User.findByIdAndUpdate(req.user.id, update, { new: true }).select('-password -avatarPublicId'));
+  const saved = await User.findByIdAndUpdate(req.user.id, update, { new: true, runValidators: true }).select('-password -avatarPublicId');
+  res.json(saved);
 });
 router.post('/avatar', authMiddleware, actionRate('upload'), upload.single('avatar'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No image.' });
@@ -47,14 +66,24 @@ router.post('/avatar', authMiddleware, actionRate('upload'), upload.single('avat
     return res.status(500).json({ error: 'Upload failed. Try again.' });
   }
   const user = await User.findById(req.user.id);
-  if (user.avatarPublicId) {
-    await destroyFile(user.avatarPublicId, 'image'); // old Cloudinary avatar
-  } else if (user.avatarUrl && user.avatarUrl.startsWith('/uploads')) {
-    fs.unlink(path.join(__dirname, '..', user.avatarUrl.replace('/uploads', 'uploads')), () => {}); // legacy local
-  }
+  if (!user) return res.status(401).json({ error: 'Account no longer exists.' });
+  const oldPublicId = user.avatarPublicId;
+  const oldUrl = user.avatarUrl;
   user.avatarUrl = up.url;
   user.avatarPublicId = up.publicId;
+  // Save first: if the DB write fails we must not delete the avatar that is
+  // still referenced by the account.
   await user.save();
+  try {
+    if (oldPublicId) {
+      await destroyFile(oldPublicId, 'image'); // old Cloudinary avatar
+    } else if (oldUrl && oldUrl.startsWith('/uploads')) {
+      fs.unlink(path.join(__dirname, '..', oldUrl.replace('/uploads', 'uploads')), () => {}); // legacy local
+    }
+  } catch (e) {
+    // Cleanup failure must not fail the upload — the new avatar is already saved.
+    console.error('Old avatar cleanup failed:', e.message);
+  }
   res.json({ avatarUrl: user.avatarUrl });
 });
 module.exports = router;

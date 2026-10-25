@@ -15,13 +15,28 @@ api.interceptors.request.use((c) => {
 // Expired/invalid token → drop the dead session and send the user back to
 // login instead of failing silently on every request. (401 only: 403s like
 // "not your post" must NOT log anyone out.)
+function clearSession() {
+  localStorage.removeItem('cc_token');
+  localStorage.removeItem('cc_user');
+  localStorage.removeItem('cc_admin');
+}
+
 api.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err.response && err.response.status === 401 && localStorage.getItem('cc_token')) {
-      localStorage.removeItem('cc_token');
-      localStorage.removeItem('cc_user');
-      localStorage.removeItem('cc_admin');
+    const status = err.response?.status;
+    const message = err.response?.data?.error || '';
+    // Expired/invalid token → send the user back to login instead of failing
+    // silently on every request. (401 only: 403s like "not your post" must
+    // NOT log anyone out.)
+    if (status === 401 && localStorage.getItem('cc_token')) {
+      clearSession();
+      if (!window.location.pathname.startsWith('/auth')) window.location.assign('/auth');
+    }
+    // A banned account will receive 403 on every request; keeping the stale
+    // session around just produces endless errors, so end it here.
+    if (status === 403 && /suspended/i.test(message) && localStorage.getItem('cc_token')) {
+      clearSession();
       if (!window.location.pathname.startsWith('/auth')) window.location.assign('/auth');
     }
     return Promise.reject(err);

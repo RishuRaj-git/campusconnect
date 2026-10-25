@@ -66,6 +66,7 @@ export function Chat() {
     if (!user) { setNote('Login to chat'); return; }
     if (!socket || !socket.connected) { setNote('Connecting… wait a second and retry'); return; }
     socket.emit('chat message', { message: text });
+    setNote('');
     setText('');
   };
   return (
@@ -109,15 +110,47 @@ export function DMs() {
   const [text, setText] = useState('');
   const [find, setFind] = useState('');
   const [params, setParams] = useSearchParams();
+  const [pending, setPending] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const logRef = useAutoScroll(msgs);
+  const activeIdRef = useRef(null);
+  activeIdRef.current = active?._id;
   const load = async () => { try { const { data } = await api.get('/dms/conversations'); setConvos(data); return data; } catch { return []; } };
   useEffect(() => { load(); }, []);
   useEffect(() => {
     if (!socket) return;
-    socket.on('dm message', (m) => { if (active && m.conversationId === active._id) setMsgs((p) => [...p, m]); });
-    return () => socket.off('dm message');
-  }, [socket, active]);
-  const open = async (c) => { setActive(c); const { data } = await api.get(`/dms/conversations/${c._id}/messages`); setMsgs(data); };
+    const onDm = (m) => {
+      if (activeIdRef.current === m.conversationId) setMsgs((p) => [...p, m]);
+      // Keep the sidebar preview and ordering fresh for every conversation,
+      // not just the one that happens to be open.
+      setConvos((prev) => {
+        if (!prev.some((c) => c._id === m.conversationId)) {
+          api.get('/dms/conversations').then(({ data }) => setConvos(data)).catch(() => {});
+          return prev;
+        }
+        const preview = m.text || (m.fileName ? `📎 ${m.fileName}` : '');
+        const next = prev.map((c) => (c._id === m.conversationId
+          ? { ...c, lastMessage: preview || c.lastMessage, lastMessageAt: m.createdAt || new Date().toISOString() }
+          : c));
+        return next.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+      });
+    };
+    // The server reports DM throttles/abuse blocks on the shared event.
+    const onBlocked = (d) => alert(d?.reason || 'Message could not be sent.');
+    socket.on('dm message', onDm);
+    socket.on('chat message blocked', onBlocked);
+    return () => { socket.off('dm message', onDm); socket.off('chat message blocked', onBlocked); };
+  }, [socket]);
+  const open = async (c) => {
+    setActive(c);
+    setMsgs([]);
+    try {
+      const { data } = await api.get(`/dms/conversations/${c._id}/messages`);
+      setMsgs(data);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Could not open that conversation.');
+    }
+  };
   const start = async (username) => {
     const name = (username || find).trim();
     if (!name) return;
@@ -135,14 +168,12 @@ export function DMs() {
     if ((!text.trim() && !pending) || !active) return;
     if (!socket || !socket.connected) { alert('Connecting… wait a second and retry'); return; }
     socket.emit('dm message', {
-      conversationId: active._id, toUsername: active.otherUser.username, text: text.trim(),
+      conversationId: active._id, text: text.trim(),
       ...(pending ? { attachment: { publicId: pending.publicId } } : {})
     });
     setText('');
     setPending(null);
   };
-  const [pending, setPending] = useState(null);
-  const [uploading, setUploading] = useState(false);
   const attach = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -251,15 +282,23 @@ export function PYQ() {
   const teacherId = params.get('teacher') || '';
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const load = async (reset = true) => {
     const p = reset ? 1 : page + 1;
-    const { data, headers } = await api.get('/pyq', { params: { ...f, teacher: teacherId || undefined, page: p, limit: 20 } });
-    const total = parseInt(headers['x-total-count'] || '0', 10);
-    setItems(reset ? data : [...items, ...data]);
-    setPage(p);
-    setHasMore(total > p * 20);
+    setLoading(true);
+    try {
+      const { data, headers } = await api.get('/pyq', { params: { ...f, teacher: teacherId || undefined, page: p, limit: 20 } });
+      const total = parseInt(headers['x-total-count'] || '0', 10);
+      setItems((prev) => (reset ? data : [...prev, ...data]));
+      setPage(p);
+      setHasMore(total > p * 20);
+    } catch {
+      // keep whatever is already rendered
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { api.get('/pyq/meta').then(r => setMeta(r.data)).catch(() => {}); api.get('/teachers', { params: { limit: 100 } }).then(r => setTeachers(r.data)).catch(() => {}); }, []);
   useEffect(() => { load(true); }, [teacherId]);
@@ -286,24 +325,19 @@ export function PYQ() {
   const [expandedId, setExpandedId] = useState(null);
   const [viewLoading, setViewLoading] = useState(null);
   const openViewer = async (p) => {
-    // Images open right away; PDFs go through our viewer stream
-    // (correct inline type + short-lived token — the iframe can't send JWT).
-    if (fileKind(p.fileName) === 'pdf') {
-      setViewLoading(p._id);
-      try {
-        const { data } = await api.post(`/pyq/${p._id}/view-token`);
-        setViewUrls((v) => ({ ...v, [p._id]: `${SERVER_URL}/api/pyq/${p._id}/view?t=${data.token}` }));
-        setExpandedId(p._id);
-      } catch {
-        setViewUrls((v) => ({ ...v, [p._id]: absUrl(p.fileUrl) }));
-        setExpandedId(p._id);
-      } finally {
-        setViewLoading(null);
-      }
-      return;
+    // Both PDFs and images stream through our backend with a short-lived
+    // token (login-gated, correct inline Content-Type). The raw storage URL
+    // is deliberately absent from the public listing.
+    setViewLoading(p._id);
+    try {
+      const { data } = await api.post(`/pyq/${p._id}/view-token`);
+      setViewUrls((v) => ({ ...v, [p._id]: `${SERVER_URL}/api/pyq/${p._id}/view?t=${data.token}` }));
+      setExpandedId(p._id);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Login required to open this file.');
+    } finally {
+      setViewLoading(null);
     }
-    setViewUrls((v) => ({ ...v, [p._id]: absUrl(p.fileUrl) }));
-    setExpandedId(p._id);
   };
   return (
     <div className="space-y-3">
@@ -316,7 +350,8 @@ export function PYQ() {
       <div className="card flex flex-wrap gap-2">
         <select className="input !w-auto" value={f.branch} onChange={e => setF({ ...f, branch: e.target.value })}><option value="">All branches</option>{meta.branches.map(b => <option key={b} value={b}>{b}</option>)}</select>
         <select className="input !w-auto" value={f.subject} onChange={e => setF({ ...f, subject: e.target.value })}><option value="">All subjects</option>{meta.subjects.map(s => <option key={s} value={s}>{s}</option>)}</select>
-        <button className="btn-primary" onClick={() => load(true)}>Filter</button>
+        <select className="input !w-auto" value={f.year} onChange={e => setF({ ...f, year: e.target.value })}><option value="">All years</option>{meta.years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+        <button className="btn-primary" onClick={() => load(true)} disabled={loading}>{loading ? 'Loading…' : 'Filter'}</button>
       </div>
       {user && (
         <form onSubmit={upload} className="card space-y-2 pop-in">
@@ -346,12 +381,12 @@ export function PYQ() {
             {p.teacher && <p className="text-xs mt-0.5">👩‍🏫 <Link to={`/teachers/${p.teacher._id}`} className="text-brand-600">{p.teacher.name}</Link></p>}
             {p.notes && <p className="text-sm mt-1">{p.notes}</p>}
             <div className="flex flex-wrap gap-2 mt-2">
-              {p.fileUrl && ['image', 'pdf'].includes(fileKind(p.fileName)) && (
+              {p.fileName && ['image', 'pdf'].includes(fileKind(p.fileName)) && (
                 expandedId === p._id
                   ? <button className="btn-ghost text-sm !py-1" onClick={() => setExpandedId(null)}>▲ Collapse</button>
                   : <button className="btn-primary text-sm !py-1" onClick={() => openViewer(p)} disabled={viewLoading === p._id}>{viewLoading === p._id ? 'Opening…' : '👁 Read'}</button>
               )}
-              {p.fileUrl && <button className="btn-ghost text-sm !py-1" onClick={() => dl(p._id)}>⬇ Save</button>}
+              {p.fileName && <button className="btn-ghost text-sm !py-1" onClick={() => dl(p._id)}>⬇ Save</button>}
               {(isAdmin || p.uploadedBy?.username === user) && <button className="btn-ghost text-sm !py-1 text-red-600" onClick={() => remove(p._id)}>Delete</button>}
             </div>
             {expandedId === p._id && viewUrls[p._id] && (
@@ -371,7 +406,8 @@ export function PYQ() {
           </div>
         ))}
       </div>
-      {hasMore && <button className="btn-ghost w-full" onClick={() => load(false)}>Load more</button>}
+      {items.length === 0 && !loading && <div className="card text-sm opacity-60">No papers match these filters yet.</div>}
+      {hasMore && <button className="btn-ghost w-full" onClick={() => load(false)} disabled={loading}>{loading ? 'Loading…' : 'Load more'}</button>}
     </div>
   );
 }
@@ -383,20 +419,35 @@ export function Profile() {
   const [p, setP] = useState(null);
   const [missing, setMissing] = useState(false);
   const [form, setForm] = useState({ branch: '', semester: '', year: '', enrollmentNo: '', bio: '' });
+  const [uploading, setUploading] = useState(false);
+  const [imgDead, setImgDead] = useState(false);
   const viewing = paramName || user;
   const own = user && viewing === user;
   usePageMeta(viewing ? { title: `${viewing}'s profile`, description: `${viewing} on CampusConnect — posts, PYQs and branches.` } : { noindex: true });
   useEffect(() => {
     if (!viewing) return;
     setMissing(false);
+    // Clear the previous profile first so navigating between users never
+    // flashes someone else's name/avatar.
+    setP(null);
     api.get(`/profile/${viewing}`).then(r => { setP(r.data); setForm(r.data); }).catch(() => setMissing(true));
   }, [viewing]);
+  useEffect(() => { setImgDead(false); }, [viewing, p?.avatarUrl]);
+  // NOTE: every hook above this line — early returns must never change the
+  // number of hooks between renders (React "rendered fewer hooks" crash).
   if (!viewing) return <div className="card">Login to view profiles. <Link to="/auth" className="text-brand-600">Login →</Link></div>;
   if (missing) return <div className="card anim-fade-in">User “{viewing}” not found. 🕵️</div>;
-  const save = async (e) => { e.preventDefault(); const { data } = await api.put('/profile', form); setP({ ...p, ...data }); alert('Saved!'); };
-  const [uploading, setUploading] = useState(false);
-  const [imgDead, setImgDead] = useState(false);
-  useEffect(() => { setImgDead(false); }, [viewing, p?.avatarUrl]);
+  const save = async (e) => {
+    e.preventDefault();
+    try {
+      const { data } = await api.put('/profile', form);
+      setP({ ...p, ...data });
+      setForm({ ...form, ...data });
+      alert('Saved!');
+    } catch (err) {
+      alert(err.response?.data?.error || 'Could not save profile.');
+    }
+  };
   const uploadAvatar = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -477,15 +528,38 @@ export function Admin() {
   }, []);
 
   const refreshUsers = async () => setUsers((await api.get('/admin/users')).data);
+  const fail = (err) => alert(err.response?.data?.error || 'Action failed.');
   const toggleBan = async (u) => {
-    await api.post(`/admin/users/${u.username}/${u.isBanned ? 'unban' : 'ban'}`);
-    refreshUsers();
+    if (!u.isBanned && !confirm(`Ban ${u.username}? They will be logged out of every action.`)) return;
+    try {
+      await api.post(`/admin/users/${u.username}/${u.isBanned ? 'unban' : 'ban'}`);
+      await refreshUsers();
+    } catch (err) { fail(err); }
   };
-  const delPost = async (id) => { if (!confirm('Delete this post?')) return; await api.delete(`/admin/discussions/${id}`); setPosts(posts.filter(p => p._id !== id)); };
-  const delChat = async (id) => { if (!confirm('Delete this message?')) return; await api.delete(`/admin/chatmessages/${id}`); setChats(chats.filter(c => c._id !== id)); };
-  const delPyq = async (id) => { if (!confirm('Delete this PYQ?')) return; await api.delete(`/pyq/${id}`); setPyqs(pyqs.filter(p => p._id !== id)); };
-  const unhideReview = async (id) => { await api.post(`/teachers/ratings/${id}/visibility`, { hidden: false }); setFlagged(flagged.filter(r => r._id !== id)); };
-  const delTeacher = async (id) => { if (!confirm('Remove this teacher and all their ratings?')) return; await api.delete(`/teachers/${id}`); setTeachersAdmin(teachersAdmin.filter(t => t._id !== id)); };
+  const delPost = async (id) => {
+    if (!confirm('Delete this post?')) return;
+    try { await api.delete(`/admin/discussions/${id}`); setPosts(posts.filter(p => p._id !== id)); }
+    catch (err) { fail(err); }
+  };
+  const delChat = async (id) => {
+    if (!confirm('Delete this message?')) return;
+    try { await api.delete(`/admin/chatmessages/${id}`); setChats(chats.filter(c => c._id !== id)); }
+    catch (err) { fail(err); }
+  };
+  const delPyq = async (id) => {
+    if (!confirm('Delete this PYQ?')) return;
+    try { await api.delete(`/pyq/${id}`); setPyqs(pyqs.filter(p => p._id !== id)); }
+    catch (err) { fail(err); }
+  };
+  const unhideReview = async (id) => {
+    try { await api.post(`/teachers/ratings/${id}/visibility`, { hidden: false }); setFlagged(flagged.filter(r => r._id !== id)); }
+    catch (err) { fail(err); }
+  };
+  const delTeacher = async (id) => {
+    if (!confirm('Remove this teacher and all their ratings?')) return;
+    try { await api.delete(`/teachers/${id}`); setTeachersAdmin(teachersAdmin.filter(t => t._id !== id)); }
+    catch (err) { fail(err); }
+  };
 
   if (denied) return <div className="card anim-fade-up">🔒 Admin only. Login as an admin to view this page.</div>;
 

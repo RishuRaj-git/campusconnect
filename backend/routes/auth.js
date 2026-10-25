@@ -20,16 +20,25 @@ router.post('/signup',
     if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
     if (await User.findOne({ username })) return res.status(400).json({ error: 'Username already taken.' });
     const hash = await bcrypt.hash(password, 10);
-    await new User({ username, password: hash }).save();
+    try {
+      await new User({ username, password: hash }).save();
+    } catch (e) {
+      // Two simultaneous signups can both pass the check above; the unique
+      // index then rejects the second one — report it as a normal 400.
+      if (e && e.code === 11000) return res.status(400).json({ error: 'Username already taken.' });
+      throw e;
+    }
     res.status(201).json({ message: 'Account created. Please log in.' });
   });
 
 router.post('/login',
   body('username').notEmpty(), body('password').notEmpty(),
   async (req, res) => {
-    const username = toStr(req.body.username, 20);
+    const username = toStr(req.body.username, 20).trim();
     const password = typeof req.body.password === 'string' ? req.body.password : '';
-    if (!username || !password) return res.status(400).json({ error: 'Invalid username or password.' });
+    // bcrypt only uses the first 72 bytes; reject absurd inputs before hashing
+    // so a 1 MB "password" cannot burn CPU on every attempt.
+    if (!username || !password || password.length > 200) return res.status(400).json({ error: 'Invalid username or password.' });
     const user = await User.findOne({ username }).select('+password username isAdmin isBanned');
     if (!user) return res.status(400).json({ error: 'Invalid username or password.' });
     if (user.isBanned) return res.status(403).json({ error: 'Your account has been suspended.' });

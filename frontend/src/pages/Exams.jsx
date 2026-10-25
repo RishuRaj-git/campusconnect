@@ -13,6 +13,16 @@ export function useNow(step = 1000) {
   return now;
 }
 
+// Whole-calendar-day difference: an exam later today is "0 days" (TODAY),
+// tomorrow is 1 — not a rounded 0.5/1.5 like raw millisecond division.
+export function daysUntil(target, now = Date.now()) {
+  const midnight = (d) => {
+    const x = new Date(d);
+    return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  };
+  return Math.round((midnight(target) - midnight(now)) / 86400000);
+}
+
 export function diffParts(target, now) {
   let s = Math.max(0, Math.floor((new Date(target).getTime() - now) / 1000));
   const d = Math.floor(s / 86400); s %= 86400;
@@ -49,17 +59,17 @@ export function CountdownDigits({ target, now }) {
 }
 
 // Sleek one-liner: illuminating pointer, constantly blinking, leaving a trail.
-export function HurryLine({ exam, days }) {
+export function HurryLine({ exam, days, editable = false }) {
   if (!exam) return null;
   const dayNum = new Date(exam.examDate).getDate();
   return (
-    <Link to="/exams" title="Click to edit exam dates" className="sleek-line anim-fade-in hover:border-red-500/60 transition-colors">
+    <Link to="/exams" title={editable ? 'Click to edit exam dates' : 'View exam schedule'} className="sleek-line anim-fade-in hover:border-red-500/60 transition-colors">
       <span className="pointer" aria-hidden />
       <span className="text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
         Semester exam on {dayNum} <span className="opacity-40">·</span>{' '}
-        <span className="text-red-500">{days} day{days !== 1 ? 's' : ''} left</span>
+        <span className="text-red-500">{days === 0 ? 'today' : `${days} day${days !== 1 ? 's' : ''} left`}</span>
       </span>
-      <span className="text-xs opacity-40 ml-auto shrink-0">✎ edit</span>
+      <span className="text-xs opacity-40 ml-auto shrink-0">{editable ? '✎ edit' : 'view →'}</span>
     </Link>
   );
 }
@@ -71,7 +81,7 @@ export function ExamCountdown() {
   const [count, setCount] = useState(0);
   useEffect(() => {
     api.get('/exams', { params: { limit: 50 } })
-      .then(r => { setNext(r.data[0] || null); setCount(r.data.length); })
+      .then(r => { setNext(r.data[0] || null); setCount(Number(r.headers['x-total-count']) || r.data.length); })
       .catch(() => {});
   }, []);
 
@@ -83,7 +93,7 @@ export function ExamCountdown() {
       </Link>
     );
   }
-  const days = Math.max(0, Math.ceil((new Date(next.examDate).getTime() - now) / 86400000));
+  const days = Math.max(0, daysUntil(next.examDate, now));
   const level = urgency(days);
   return (
     <div className="space-y-2">
@@ -116,13 +126,23 @@ export function ExamsPage() {
   const [showAll, setShowAll] = useState(false);
   const [form, setForm] = useState({ title: '', subject: '', branch: '', examDate: '', examType: 'End-Term', venue: '' });
 
-  const load = async () => setExams((await api.get('/exams', { params: showAll ? { all: 1 } : {} })).data);
+  const load = async () => {
+    try {
+      setExams((await api.get('/exams', { params: showAll ? { all: 1 } : {} })).data);
+    } catch {
+      // keep the current list on transient errors
+    }
+  };
   useEffect(() => { load(); }, [showAll]);
 
   const add = async (e) => {
     e.preventDefault();
+    // datetime-local has no timezone; convert on the client so the server
+    // stores the exact instant the user picked, not their wall-clock in UTC.
+    const when = new Date(form.examDate);
+    if (Number.isNaN(when.getTime())) { alert('Pick a valid date and time.'); return; }
     try {
-      await api.post('/exams', form);
+      await api.post('/exams', { ...form, examDate: when.toISOString() });
       setForm({ title: '', subject: '', branch: '', examDate: '', examType: 'End-Term', venue: '' });
       load();
     } catch (err) { alert(err.response?.data?.error || 'Only admins can add exams'); }
@@ -133,12 +153,12 @@ export function ExamsPage() {
     catch (err) { alert(err.response?.data?.error || 'Delete failed'); }
   };
 
-  const hurryOne = exams.map(e => ({ e, days: Math.ceil((new Date(e.examDate).getTime() - now) / 86400000) })).find(x => x.days <= 7 && x.days >= 0);
+  const hurryOne = exams.map(e => ({ e, days: daysUntil(e.examDate, now) })).find(x => x.days <= 7 && x.days >= 0);
 
   return (
     <div className="space-y-3">
       <h2 className="font-display font-bold text-2xl">📝 Exam Season</h2>
-      {hurryOne && <HurryLine exam={hurryOne.e} days={hurryOne.days} />}
+      {hurryOne && <HurryLine exam={hurryOne.e} days={hurryOne.days} editable={isAdmin} />}
 
       {isAdmin ? (
         <form onSubmit={add} className="card space-y-2 pop-in">
@@ -161,7 +181,7 @@ export function ExamsPage() {
 
       <div className="space-y-2">
         {exams.map((e, i) => {
-          const days = Math.ceil((new Date(e.examDate).getTime() - now) / 86400000);
+          const days = daysUntil(e.examDate, now);
           const level = days < 0 ? 'done' : urgency(days);
           return (
             <div key={e._id} className={`card lift reveal ${level === 'hurry' ? 'hurry border-red-500/60' : ''}`} style={{ '--d': `${Math.min(i, 8) * 50}ms` }}>

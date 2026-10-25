@@ -3,32 +3,43 @@ const Exam = require('../models/Exam');
 const { authMiddleware } = require('../middleware/auth');
 const adminOnly = require('../middleware/admin');
 const { containsAbuse } = require('../utils/profanity');
+const { toStr } = require('../utils/sanitize');
 
 const router = express.Router();
 
 // GET /api/exams — upcoming first (default). ?all=1 includes past exams.
 router.get('/', async (req, res) => {
-  const filter = req.query.all ? {} : { examDate: { $gte: new Date() } };
+  const includePast = req.query.all === '1' || req.query.all === 'true';
+  const filter = includePast ? {} : { examDate: { $gte: new Date() } };
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-  res.json(await Exam.find(filter).sort({ examDate: 1 }).limit(limit).lean());
+  const [total, items] = await Promise.all([
+    Exam.countDocuments(filter),
+    Exam.find(filter).sort({ examDate: 1 }).skip((page - 1) * limit).limit(limit).lean()
+  ]);
+  res.set('X-Total-Count', String(total));
+  res.json(items);
 });
 
 // POST /api/exams — admin only (official scheduled dates)
 router.post('/', authMiddleware, adminOnly, async (req, res) => {
-  const { title, subject, branch, examDate, examType, venue } = req.body;
-  if (!title || !examDate) return res.status(400).json({ error: 'Title and date are required.' });
-  if (containsAbuse(title) || containsAbuse(subject || '')) {
+  const title = toStr(req.body.title, 120).trim();
+  const subject = toStr(req.body.subject, 80).trim();
+  const branch = toStr(req.body.branch, 40).trim();
+  const venue = toStr(req.body.venue, 120).trim();
+  if (!title || !req.body.examDate) return res.status(400).json({ error: 'Title and date are required.' });
+  if (containsAbuse(title) || containsAbuse(subject) || containsAbuse(venue)) {
     return res.status(400).json({ error: 'Please keep it respectful.' });
   }
-  const date = new Date(examDate);
+  const date = new Date(String(req.body.examDate));
   if (isNaN(date)) return res.status(400).json({ error: 'Invalid date.' });
   const exam = await new Exam({
-    title: String(title).slice(0, 120),
-    subject: String(subject || '').slice(0, 80),
-    branch: String(branch || '').slice(0, 40),
+    title,
+    subject,
+    branch,
     examDate: date,
-    examType: ['Mid-Term', 'End-Term', 'Internal', 'Practical', 'Other'].includes(examType) ? examType : 'End-Term',
-    venue: String(venue || '').slice(0, 120),
+    examType: ['Mid-Term', 'End-Term', 'Internal', 'Practical', 'Other'].includes(req.body.examType) ? req.body.examType : 'End-Term',
+    venue,
     author: req.user.username,
     authorId: req.user.id
   }).save();

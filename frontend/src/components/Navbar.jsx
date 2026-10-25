@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../api';
 
 const tabs = [
   { to: '/', label: 'Home', icon: <path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1Z" /> },
@@ -43,13 +44,96 @@ export function ThemeToggle() {
   );
 }
 
+function Notifications() {
+  const { user, socket } = useAuth();
+  const nav = useNavigate();
+  const [items, setItems] = useState([]);
+  const [unread, setUnread] = useState(0);
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (!user) { setItems([]); setUnread(0); setOpen(false); return; }
+    api.get('/notifications', { params: { limit: 20 } })
+      .then(({ data }) => { setItems(data); setUnread(data.filter((n) => !n.read).length); })
+      .catch(() => {});
+  }, [user]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onNotification = (n) => {
+      setItems((p) => [n, ...p].slice(0, 20));
+      setUnread((c) => c + 1);
+    };
+    socket.on('notification', onNotification);
+    return () => socket.off('notification', onNotification);
+  }, [socket]);
+
+  // Close the dropdown when clicking anywhere outside of it.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  if (!user) return null;
+
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && unread > 0) {
+      try { await api.post('/notifications/read-all'); } catch { /* badge will retry next load */ }
+      setItems((p) => p.map((n) => ({ ...n, read: true })));
+      setUnread(0);
+    }
+  };
+  const openItem = (n) => {
+    setOpen(false);
+    nav(n.type === 'dm' ? '/dms' : '/discussions');
+  };
+
+  return (
+    <div className="relative" ref={boxRef}>
+      <button
+        onClick={toggle}
+        aria-label="Notifications"
+        title="Notifications"
+        className="btn-ghost !px-2.5 !py-1.5 relative"
+      >
+        🔔{unread > 0 && <span className="notif-badge">{unread > 9 ? '9+' : unread}</span>}
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-80 max-w-[85vw] max-h-80 overflow-y-auto card !p-2 z-30 anim-pop-in">
+          <p className="text-xs font-bold uppercase tracking-wide opacity-60 px-2 py-1">Notifications</p>
+          {items.map((n) => (
+            <button
+              key={n._id}
+              onClick={() => openItem(n)}
+              className={`row-hover block w-full text-left px-2 py-2 text-sm ${n.read ? '' : 'font-semibold'}`}
+            >
+              <span className="block break-words">{n.text}</span>
+              {n.createdAt && (
+                <span className="block text-[10px] opacity-50 mt-0.5">
+                  {new Date(n.createdAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </button>
+          ))}
+          {items.length === 0 && <p className="text-sm opacity-60 px-2 py-3">Nothing yet. Likes, answers and DMs show up here.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Navbar() {
   const { user, logout, isAdmin } = useAuth();
   const nav = useNavigate();
   return (
     <header className="sticky top-0 z-20 px-3 pt-3">
       <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
-        <Link to="/" className="brand-mark font-display font-bold text-xl tracking-tight shrink-0">
+        <Link to="/" className="brand-mark font-display font-bold text-lg sm:text-xl tracking-tight shrink-0">
           🟣 Campus<span className="text-brand-600 dark:text-accent-400">Connect</span>
         </Link>
         {/* Desktop: floating Apple-style pill */}
@@ -66,6 +150,7 @@ export default function Navbar() {
           )}
         </nav>
         <div className="flex items-center gap-2 shrink-0">
+          <Notifications />
           <ThemeToggle />
           {user ? (
             <>
@@ -85,6 +170,11 @@ export default function Navbar() {
               {({ isActive }) => (<><svg {...iconProps}>{t.icon}</svg>{t.label}{isActive && <span className="tab-dot" />}</>)}
             </NavLink>
           ))}
+          {isAdmin && (
+            <NavLink to="/admin" className={({ isActive }) => `tab-item${isActive ? ' active' : ''}`}>
+              {({ isActive }) => (<><svg {...iconProps}><path d="M12 3l2.5 5.5L20 9.5l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-1Z" /></svg>Admin{isActive && <span className="tab-dot" />}</>)}
+            </NavLink>
+          )}
         </div>
       </nav>
     </header>

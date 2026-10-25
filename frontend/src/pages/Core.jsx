@@ -20,8 +20,7 @@ export function AuthPage() {
       if (mode === 'signup') { await api.post('/auth/signup', { username, password }); setMode('login'); setMsg('Account created! Please log in.'); }
       else {
         const { data } = await api.post('/auth/login', { username, password });
-        login(data.token, data.username);
-        localStorage.setItem('cc_admin', data.isAdmin ? '1' : '0');
+        login(data.token, data.username, data.isAdmin);
         nav('/');
       }
     } catch (err) { setMsg(err.response?.data?.error || 'Something went wrong'); }
@@ -103,15 +102,25 @@ export function Discussions() {
   const [sort, setSort] = useState('latest');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState({});
   const [drafts, setDrafts] = useState({});
   const load = async (reset = true) => {
     const p = reset ? 1 : page + 1;
-    const { data, headers } = await api.get('/discussions', { params: { search, sort, page: p, limit: 20 } });
-    const total = parseInt(headers['x-total-count'] || '0', 10);
-    setPosts(reset ? data : [...posts, ...data]);
-    setPage(p);
-    setHasMore(total > p * 20);
+    setLoading(true);
+    try {
+      const { data, headers } = await api.get('/discussions', { params: { search, sort, page: p, limit: 20 } });
+      const total = parseInt(headers['x-total-count'] || '0', 10);
+      // Functional update avoids duplicating items when "Load more" is
+      // clicked twice before the previous request finishes.
+      setPosts((prev) => (reset ? data : [...prev, ...data]));
+      setPage(p);
+      setHasMore(total > p * 20);
+    } catch {
+      // keep the list that is already on screen
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
   const create = async (e) => {
@@ -119,9 +128,12 @@ export function Discussions() {
     try { await api.post('/discussions', { title, content }); setTitle(''); setContent(''); load(true); }
     catch (err) { alert(err.response?.data?.error || 'Login required to ask'); }
   };
-  const likeQ = async (id) => { try { const { data } = await api.post(`/discussions/${id}/like`); setPosts(posts.map(p => p._id === id ? data : p)); } catch { alert('Login required'); } };
+  const likeQ = async (id) => {
+    try { const { data } = await api.post(`/discussions/${id}/like`); setPosts((prev) => prev.map((p) => (p._id === id ? data : p))); }
+    catch { alert('Login required'); }
+  };
   const likeA = async (qid, cid) => {
-    try { const { data } = await api.post(`/discussions/${qid}/comments/${cid}/like`); setPosts(posts.map(p => p._id === qid ? data : p)); }
+    try { const { data } = await api.post(`/discussions/${qid}/comments/${cid}/like`); setPosts((prev) => prev.map((p) => (p._id === qid ? data : p))); }
     catch (err) { alert(err.response?.data?.error || 'Login required'); }
   };
   const answer = async (id) => {
@@ -129,9 +141,9 @@ export function Discussions() {
     if (!text) return;
     try {
       const { data } = await api.post(`/discussions/${id}/comments`, { text });
-      setPosts(posts.map(p => p._id === id ? data : p));
-      setDrafts({ ...drafts, [id]: '' });
-      setExpanded({ ...expanded, [id]: true });
+      setPosts((prev) => prev.map((p) => (p._id === id ? data : p)));
+      setDrafts((prev) => ({ ...prev, [id]: '' }));
+      setExpanded((prev) => ({ ...prev, [id]: true }));
     } catch (err) { alert(err.response?.data?.error || 'Failed'); }
   };
   return (
@@ -170,7 +182,7 @@ export function Discussions() {
             <div className="flex flex-wrap gap-2 mt-2">
               <button className="btn-ghost text-sm !py-1" onClick={() => likeQ(p._id)}>👍 Like question</button>
               {n > 2 && (
-                <button className="btn-ghost text-sm !py-1" onClick={() => setExpanded({ ...expanded, [p._id]: !isOpen })}>
+                <button className="btn-ghost text-sm !py-1" onClick={() => setExpanded((prev) => ({ ...prev, [p._id]: !prev[p._id] }))}>
                   {isOpen ? 'Hide answers ▲' : `View all ${n} answers ▼`}
                 </button>
               )}
@@ -184,7 +196,7 @@ export function Discussions() {
               <div className="flex gap-2 mt-3">
                 <input
                   className="input" placeholder="Write your answer…" value={drafts[p._id] || ''}
-                  onChange={e => setDrafts({ ...drafts, [p._id]: e.target.value })}
+                  onChange={e => setDrafts((prev) => ({ ...prev, [p._id]: e.target.value }))}
                   onKeyDown={e => e.key === 'Enter' && answer(p._id)} maxLength={1000}
                 />
                 <button className="btn-primary shrink-0" onClick={() => answer(p._id)}>Answer</button>
@@ -195,8 +207,8 @@ export function Discussions() {
           </div>
         );
       })}
-      {posts.length === 0 && <div className="card text-sm opacity-60">No questions yet — ask the first one! ☝️</div>}
-      {hasMore && <button className="btn-ghost w-full" onClick={() => load(false)}>Load more</button>}
+      {posts.length === 0 && !loading && <div className="card text-sm opacity-60">No questions yet — ask the first one! ☝️</div>}
+      {hasMore && <button className="btn-ghost w-full" onClick={() => load(false)} disabled={loading}>{loading ? 'Loading…' : 'Load more'}</button>}
     </div>
   );
 }

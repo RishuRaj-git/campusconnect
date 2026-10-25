@@ -3,6 +3,7 @@
 // Files are uploaded as authenticated-origin private-ish assets; downloads
 // always flow through our API (auth + download counter), never direct links.
 const cloudinary = require('cloudinary').v2;
+const crypto = require('crypto');
 
 if (process.env.CLOUDINARY_CLOUD_NAME) {
   cloudinary.config({
@@ -27,7 +28,10 @@ function uploadBuffer(buffer, { folder = 'campusconnect/pyqs', filename = 'file'
   const base = filename.replace(/\.[a-zA-Z0-9]{2,5}$/, '').replace(/[^a-zA-Z0-9-_]/g, '_').slice(-80) || 'file';
   // Raw PDFs stay extensionless (this account 401s `.pdf`-suffixed delivery);
   // images keep theirs. Real names travel in DB `fileName`, restored on download.
-  const publicId = (resourceType === 'raw' ? `${Date.now()}-${base}` : `${Date.now()}-${base}${ext}`).slice(0, 150);
+  // Random suffix prevents two same-named uploads in the same millisecond
+  // from overwriting each other.
+  const unique = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const publicId = (resourceType === 'raw' ? `${unique}-${base}` : `${unique}-${base}${ext}`).slice(0, 150);
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       { folder, resource_type: resourceType, public_id: publicId },
